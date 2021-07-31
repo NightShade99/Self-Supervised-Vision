@@ -1,8 +1,8 @@
 # Self Supervised Vision
-**\[WIP\]** Implementations and observations on some self-supervised methods used to pre-train networks for vision tasks. 
+**\[WIP\]** Implementations and observations on some self-supervised methods used to pre-train networks for vision tasks. This is meant to be a personal exploratory project; these implementations are not official.
 
 ## Algorithms
-The algorithms checked in the table below have been implemented.
+Tentatively, the algorithms checked in the table below will be implemented.
 
 |                                   Algorithm                                   |  Shorthand  |                     Paper                     | Status |
 |:-----------------------------------------------------------------------------:|:-----------:|:---------------------------------------------:|:------:|
