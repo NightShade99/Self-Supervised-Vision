@@ -19,3 +19,5 @@ Tentatively, the algorithms checked in the table below will be implemented.
 | Bootstrap Your Own Latent: A new approach to self-supervised Learning         |     BYOL    |   [arXiv](https://arxiv.org/abs/2006.07733)   |        |
 | Representation Learning via Invariant Causal Mechanisms                       |    ReLIC    |   [arXiv](https://arxiv.org/abs/2010.07922)   |        |
 | Exploring Simple Siamese Representation Learning                              |   SimSiam   |   [arXiv](https://arxiv.org/abs/2011.10566)   |        |
+| Emerging Properties in Self-Supervised Vision Transformers                    |     DINO    |   [arXiv](https://arxiv.org/abs/2104.14294)   |        |
+| Barlow Twins: Self-Supervised Learning via Redundancy Reduction               |    Barlow   |   [arXiv](https://arxiv.org/abs/2103.03230)   |        |
