@@ -13,7 +13,7 @@ class SimclrLoss(tf_losses.Loss):
         self.normalize = normalize 
         self.temperature = temperature 
         self.softmax = nn.Softmax(axis=-1)
-        self.cross_entropy = tf_losses.CategoricalCrossentropy(reduction="none")
+        self.cross_entropy = tf_losses.CategoricalCrossentropy(from_logits=True, reduction="none")
 
     def __call__(self, z1, z2):
         bs = z1.shape[0]
@@ -41,7 +41,7 @@ class SimclrLoss(tf_losses.Loss):
         neg_1 = tf.concat([logits_11_neg, logits_12_neg], axis=0)                                           # (2*bs, bs-1)
         neg_2 = tf.concat([logits_21_neg, logits_22_neg], axis=0)                                           # (2*bs, bs-1)
         neg_logits = tf.concat([neg_1, neg_2], axis=1)                                                      # (2*bs, 2*bs-2)
-        probs = self.softmax(tf.concat([pos_logits, neg_logits], axis=-1))                                  # (2*bs, 2*bs-1)
+        logits = tf.concat([pos_logits, neg_logits], axis=-1)                                               # (2*bs, 2*bs-1)
         targets = tf.one_hot(labels, depth=2*bs-1)                                                          # (2*bs, 2*bs-1)
-        loss = self.cross_entropy(y_true=targets, y_pred=probs)
+        loss = self.cross_entropy(y_true=targets, y_pred=logits)
         return tf.reduce_mean(loss)
