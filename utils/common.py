@@ -3,7 +3,7 @@ import os
 import yaml 
 import random 
 import logging 
-import numpy as numpy
+import numpy as np
 import tensorflow as tf
 
 COLORS = {
@@ -45,10 +45,10 @@ class AverageMeter:
 class Logger:
 
     def __init__(self, output_dir):
-        [logging.root.removeHandler(handler) for handler in logging.root.handler[:]]
+        [logging.root.removeHandler(handler) for handler in logging.root.handlers[:]]
         logging.basicConfig(
             level = logging.INFO,
-            format = "%{message}s",
+            format = "%(message)s",
             handlers = [logging.FileHandler(os.path.join(output_dir, "trainlogs.txt"))])
 
     def print(self, msg, mode=""):
@@ -93,8 +93,7 @@ def open_config(file):
     return config 
 
 def initialize_experiment(args, output_root, seed=420):
-    tf.reset_default_graph()
-    tf.radom.set_seed(seed)
+    tf.random.set_seed(seed)
     np.random.seed(seed)
     random.seed(seed)
 

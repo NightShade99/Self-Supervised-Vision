@@ -91,7 +91,7 @@ class Bottleneck(nn.Layer):
 
 class ResNet(tf.keras.Model):
 
-    def __init__(self, block, layers, num_classes=10, groups=1, width_per_group=64, replace_stride_with_dilation=None, reduce_bottom=False):
+    def __init__(self, block, layers, groups=1, width_per_group=64, replace_stride_with_dilation=None, reduce_bottom=False):
         super(ResNet, self).__init__()
         self.base_width = width_per_group 
         self.groups = groups 
@@ -114,7 +114,6 @@ class ResNet(tf.keras.Model):
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2, dilate=replace_stride_with_dilation[2])
         self.avgpool = tfa_nn.AdaptiveAveragePooling2D(output_size=(1, 1), data_format='channels_last')
         self.flatten = nn.Flatten()
-        self.fc = nn.Dense(num_classes)
 
     def _make_layer(self, block, planes, blocks, stride=1, dilate=False):
         downsample = None 
@@ -143,7 +142,6 @@ class ResNet(tf.keras.Model):
         x = self.layer4(x)
         x = self.avgpool(x)
         x = self.flatten(x)
-        x = self.fc(x)
         return x
 
 

@@ -1,5 +1,6 @@
 
 import tensorflow.keras.optimizers as optim 
+import tensorflow_addons.optimizers as tfa_optim
 import tensorflow.keras.optimizers.schedules as lr_sched
 
 
@@ -7,13 +8,14 @@ def get_optimizer(config):
     name = config.get("name", "sgd")
 
     if name == "sgd":
-        return optim.SGD(
-            learning_rate=config["lr"], momentum=config.get("momentum", 0.9), nesterov=config.get("nesterov", True)
+        return tfa_optim.SGDW(
+            learning_rate=config["lr"], momentum=config.get("momentum", 0.9), nesterov=config.get("nesterov", True),
+            weight_decay=config.get("weight_decay", 1e-06)
         )
     elif name == "adam":
-        return optim.Adam(
+        return tfa_optim.AdamW(
             learning_rate=config["lr"], beta_1=config.get("beta_1", 0.9), beta_2=config.get("beta_2", 0.999),
-            amsgrad=config.get("amsgrad", False), epsilon=config.get("epsilon", 1e-07)
+            amsgrad=config.get("amsgrad", False), epsilon=config.get("epsilon", 1e-07), weight_decay=config.get("weight_decay", 1e-06)
         )
     elif name == "rmsprop":
         return optim.RMSProp(
