@@ -110,15 +110,17 @@ class SimCLR:
                     z = F.normalize(z, dim=-1, p=2).detach().cpu().numpy()
                 fvecs.append(z), gt.append(trg)
                 common.progress_bar(progress=(step+1)/len(self.train_loader), desc="Building train features")
+            print()
 
         elif split == "test":
             for step, batch in enumerate(self.test_loader):
-                img, trg = batch["img"].to(self.device), batch["trg"].detach().cpu().numpy()
+                img, trg = batch["img"].to(self.device), batch["label"].detach().cpu().numpy()
                 with torch.no_grad():
                     z = self.proj_head(self.encoder(img))
                     z = F.normalize(z, dim=-1, p=2).detach().cpu().numpy()
                 fvecs.append(z), gt.append(trg)
                 common.progress_bar(progress=(step+1)/len(self.test_loader), desc="Building test features")
+            print()
         else:
             raise ValueError(f"Unrecognized split {split}, expected one of [train, test]")
 
@@ -132,15 +134,16 @@ class SimCLR:
             config = self.config["linear_eval"],
             train_data = {"fvecs": train_vecs, "labels": train_gt},
             test_data = {"fvecs": test_vecs, "labels": test_gt},
-            num_classes = 10
+            num_classes = 10,
+            device = self.device
         )
         self.logger.write("Test linear eval accuracy: {:.4f}".format(test_linear_acc), mode="info")
 
     def train(self):
-        print("\n[INFO] Beginning training.")
+        self.logger.print("Beginning training.", mode="info")
         for epoch in range(1, self.config["epochs"]+1):
             train_meter = common.AverageMeter()
-            desc_str = "Epoch {:3d}/{:3d}".format(epoch, self.config["epochs"])
+            desc_str = "[TRAIN] Epoch {:3d}/{:3d}".format(epoch, self.config["epochs"])
             self.adjust_learning_rate(epoch)
 
             for step, batch in enumerate(self.train_loader):
@@ -148,8 +151,8 @@ class SimCLR:
                 wandb.log({"Train loss": train_metrics["loss"]})
                 train_meter.add(train_metrics)
                 common.progress_bar(progress=(step+1)/len(self.train_loader), desc=desc_str, status=train_meter.return_msg())
-
-            self.logger.write("Epoch {:3d}/{:3d} ".format(epoch, self.config["epochs"]) + train_meter.return_msg(), mode="train")
+            print()
+            self.logger.write("[TRAIN] Epoch {:3d}/{:3d} ".format(epoch, self.config["epochs"]) + train_meter.return_msg(), mode="train")
 
             if epoch % self.config["eval_every"] == 0:
                 knn_acc = self.knn_validate()

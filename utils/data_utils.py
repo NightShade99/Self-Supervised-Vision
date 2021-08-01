@@ -57,7 +57,7 @@ class SimclrDataset(Dataset):
 
 def get_feature_dataloaders(features, labels, batch_size):
     train_dset = FeaturesDataset(features=features, labels=labels)
-    test_dset = SimclrDataset(features=features, labels=labels)
+    test_dset = FeaturesDataset(features=features, labels=labels)
     train_loader = DataLoader(train_dset, batch_size=batch_size, shuffle=True)
     test_loader = DataLoader(test_dset, batch_size=batch_size, shuffle=False)
     return train_loader, test_loader

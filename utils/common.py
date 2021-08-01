@@ -55,9 +55,9 @@ class Logger:
         if mode == "info":
             print(f"{COLORS['yellow']}[INFO] {msg}{COLORS['end']}")
         elif mode == 'train':
-            print(f"\n[TRAIN] {msg}")
+            print(f"[TRAIN] {msg}")
         elif mode == 'val':
-            print(f"\n{COLORS['blue']}[VALID] {msg}{COLORS['end']}")
+            print(f"{COLORS['blue']}[VALID] {msg}{COLORS['end']}")
         else:
             print(f"{msg}")
 
@@ -69,6 +69,10 @@ class Logger:
         elif mode == "val":
             msg = f"[VALID] {msg}"
         logging.info(msg)
+
+    def record(self, msg, mode):
+        self.print(msg, mode)
+        self.write(msg, mode)
 
 
 def count_parameters(model):

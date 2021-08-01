@@ -41,11 +41,11 @@ encoder:
   reduce_bottom_conv: True
 
 projection_head:
-  proj_dim: 1024
+  proj_dim: 2048
   
 optimizer:
   name: sgd
-  lr: 1.0
+  lr: 0.5
   momentum: 0.9
   nesterov: True
   weight_decay: 1.0e-06
@@ -60,8 +60,9 @@ loss_fn:
 
 linear_eval:
   epochs: 100
+  input_dim: 2048
   batch_size: 256
-  learning_rate: 0.1
+  lr: 0.1
 
 wandb:
   project: self-supervised-vision

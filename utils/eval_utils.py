@@ -9,10 +9,10 @@ import torch.optim.lr_scheduler as lr_sched
 from . import data_utils, losses
 
 
-def compute_neighbor_accuracy(fvecs, labels, k=20):
+def compute_neighbor_accuracy(fvecs, targets, k=20):
     index = faiss.IndexFlatIP(fvecs.shape[1])
     index.add(fvecs.astype(np.float32))
-    _, neighbor_idx = index.search(fvecs, top_k=k+1)
+    _, neighbor_idx = index.search(fvecs, k+1)
 
     anchor_targets = np.repeat(targets.reshape(-1, 1), k, axis=1)
     neighbor_targets = np.take(targets, neighbor_idx[:, 1:], axis=0)
@@ -29,10 +29,10 @@ def linear_evaluation(config, train_data, test_data, num_classes, device):
     clf_sched = lr_sched.CosineAnnealingLR(clf_optim, T_max=config["epochs"], eta_min=0.0, last_epoch=-1)
     loss_fn = nn.NLLLoss()
     
-    for epoch in range(1, config["linear_eval_epochs"]+1):
+    for epoch in range(1, config["epochs"]+1):
         train_meter = common.AverageMeter()
         test_meter = common.AverageMeter()
-        desc_str = "Epoch {:2d}/{:2d}".format(epoch, config["epochs"])
+        desc_str = "[TRAIN] Epoch {:2d}/{:2d}".format(epoch, config["epochs"])
 
         for step, batch in enumerate(train_loader):
             fvecs, labels = batch["features"].to(device), batch["label"].to(device)
