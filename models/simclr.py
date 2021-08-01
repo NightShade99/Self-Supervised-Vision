@@ -1,10 +1,10 @@
 
 import os
+import torch 
 import wandb
 import numpy as np 
-import tensorflow as tf
-import tensorflow.keras.layers as nn 
-import tensorflow.keras.utils as tf_utils
+import torch.nn as nn
+import torch.nn.functional as F
 
 from networks import resnet, vit 
 from utils import common, losses
@@ -20,15 +20,15 @@ NETWORKS = {
 }
 
 
-class ProjectionHead(tf.keras.Model):
+class ProjectionHead(nn.Module):
 
     def __init__(self, input_dim, output_dim):
         super(ProjectionHead, self).__init__()
-        self.fc1 = nn.Dense(input_dim)
-        self.bn1 = nn.BatchNormalization()
+        self.fc1 = nn.Linear(input_dim, input_dim)
+        self.bn1 = nn.BatchNorm1d(input_dim)
         self.relu = nn.ReLU()
-        self.fc2 = nn.Dense(output_dim)
-        self.bn2 = nn.BatchNormalization()
+        self.fc2 = nn.Linear(input_dim, output_dim)
+        self.bn2 = nn.BatchNorm1d(output_dim)
 
     def __call__(self, x):
         x = self.relu(self.bn1(self.fc1(x)))
@@ -42,17 +42,16 @@ class SimCLR:
         assert args["arch"] in NETWORKS.keys(), f"Expected 'arch' to be one of {list(NETWORKS.keys())}"
         output_root = os.path.join("outputs/simclr", args["arch"])
         
-        self.config, self.output_dir, self.logger = common.initialize_experiment(args, output_root)
+        self.config, self.output_dir, self.logger, self.device = common.initialize_experiment(args, output_root)
         self.train_loader, self.test_loader = data_utils.get_simclr_dataloaders(**self.config["data"])
         run = wandb.init(**self.config["wandb"])
         self.logger.write("Wandb url: {}".format(run.get_url()), mode="info")
 
         encoder, encoder_dim = NETWORKS[args["arch"]].values()
-        self.encoder = encoder(**self.config["encoder"])
-        self.proj_head = ProjectionHead(encoder_dim, self.config["projection_head"]["proj_dim"])
-        self.optim = train_utils.get_optimizer(self.config["optimizer"])
-        self.scheduler = train_utils.get_scheduler(self.config["scheduler"])
-        self.warmup_epochs = self.config["warmup_epochs"]
+        self.encoder = encoder(**self.config["encoder"]).to(self.device)
+        self.proj_head = ProjectionHead(encoder_dim, self.config["projection_head"]["proj_dim"]).to(self.device)
+        self.optim = train_utils.get_optimizer(self.config["optimizer"], params=list(self.encoder.parameters())+list(self.proj_head.parameters()))
+        self.scheduler, self.warmup_epochs = train_utils.get_scheduler({**self.config["scheduler"], "epochs": self.config["epochs"]}, optimizer=self.optim)
         if self.warmup_epochs > 0:
             self.warmup_rate = (self.config["optimizer"]["lr"] - 1e-12) / self.warmup_epochs
 
@@ -63,35 +62,37 @@ class SimCLR:
             self.load_checkpoint(args["load"])
 
     def save_checkpoint(self):
-        self.encoder.save_weights(os.path.join(self.output_dir, "encoder"))
-        self.proj_head.save_weights(os.path.join(self.output_dir, "proj_head"))
+        state = {"encoder": self.encoder.state_dict(), "proj_head": self.proj_head.state_dict()}
+        torch.save(state, os.path.join(self.output_dir, "best_model.pt"))
 
     def load_checkpoint(self, ckpt_dir):
         if os.path.exists(os.path.join(ckpt_dir, "encoder")):
-            self.encoder.load_weights(os.path.join(ckpt_dir, "encoder"))
-            self.proj_head.load_weights(os.path.join(ckpt_dir, "proj_head"))
+            state = torch.load(os.path.join(ckpt_dir, "best_model.pt"), map_location=self.device)
+            self.encoder.load_state_dict(state["encoder"])
+            self.proj_head.load_state_dict(state["proj_head"])
             self.logger.print(f"Successfully loaded model from {ckpt_dir}")
         else:
             raise NotImplementedError(f"Could not find saved checkpoint at {ckpt_dir}")
 
     def adjust_learning_rate(self, epoch):
         if epoch <= self.warmup_epochs:
-            new_lr = 1e-12 + epoch * self.warmup_rate
+            for group in self.optim.param_groups:
+                group["lr"] = 1e-12 + epoch * self.warmup_rate
+        elif self.scheduler is not None:
+            self.scheduler.step()
         else:
-            new_lr = self.scheduler(epoch)
-        self.optim.lr.assign(new_lr)
+            pass
 
     def train_step(self, batch):
-        img_1, img_2 = batch["aug_1"], batch["aug_2"]
-        with tf.GradientTape() as tape:
-            z_1 = self.proj_head(self.encoder(img_1))
-            z_2 = self.proj_head(self.encoder(img_2))
-            loss = self.loss_fn(z_1, z_2)
-        
-        variables = (self.encoder.trainable_variables + self.proj_head.trainable_variables)
-        grads = tape.gradient(loss, variables)
-        self.optim.apply_gradients(zip(grads, variables))
-        return {"loss": float(loss)}
+        img_1, img_2 = batch["aug_1"].to(self.device), batch["aug_2"].to(self.device)
+        z_1 = self.proj_head(self.encoder(img_1))
+        z_2 = self.proj_head(self.encoder(img_2))
+        loss = self.loss_fn(z_1, z_2)
+
+        self.optim.zero_grad()
+        loss.backward()
+        self.optim.step()        
+        return {"loss": loss.item()}
 
     def knn_validate(self):
         fvecs, gt = self.build_features(split="test")
@@ -102,20 +103,20 @@ class SimCLR:
         fvecs, gt = [], []
 
         if split == "train":
-            for step in range(len(self.train_loader)):
-                batch = self.train_loader.get()
-                img, trg = batch["img"], batch["label"]
-                z = self.proj_head(self.encoder(img))
-                z = tf_utils.normalize(z, axis=-1, order=2)
+            for step, batch in enumerate(self.train_loader):
+                img, trg = batch["img"].to(self.device), batch["label"].detach().cpu().numpy()
+                with torch.no_grad():
+                    z = self.proj_head(self.encoder(img))
+                    z = F.normalize(z, dim=-1, p=2).detach().cpu().numpy()
                 fvecs.append(z), gt.append(trg)
                 common.progress_bar(progress=(step+1)/len(self.train_loader), desc="Building train features")
 
         elif split == "test":
-            for step in range(len(self.test_loader)):
-                batch = self.test_loader.get()
-                img, trg = batch["img"], batch["trg"]
-                z = self.proj_head(self.encoder(img))
-                z = tf_utils.normalize(z, axis=-1, order=2)
+            for step, batch in enumerate(self.test_loader):
+                img, trg = batch["img"].to(self.device), batch["trg"].detach().cpu().numpy()
+                with torch.no_grad():
+                    z = self.proj_head(self.encoder(img))
+                    z = F.normalize(z, dim=-1, p=2).detach().cpu().numpy()
                 fvecs.append(z), gt.append(trg)
                 common.progress_bar(progress=(step+1)/len(self.test_loader), desc="Building test features")
         else:
@@ -140,15 +141,15 @@ class SimCLR:
         for epoch in range(1, self.config["epochs"]+1):
             train_meter = common.AverageMeter()
             desc_str = "Epoch {:3d}/{:3d}".format(epoch, self.config["epochs"])
+            self.adjust_learning_rate(epoch)
 
-            for step in range(len(self.train_loader)):
-                train_metrics = self.train_step(batch=self.train_loader.get())
+            for step, batch in enumerate(self.train_loader):
+                train_metrics = self.train_step(batch)
                 wandb.log({"Train loss": train_metrics["loss"]})
                 train_meter.add(train_metrics)
                 common.progress_bar(progress=(step+1)/len(self.train_loader), desc=desc_str, status=train_meter.return_msg())
 
             self.logger.write("Epoch {:3d}/{:3d} ".format(epoch, self.config["epochs"]) + train_meter.return_msg(), mode="train")
-            self.adjust_learning_rate(epoch)
 
             if epoch % self.config["eval_every"] == 0:
                 knn_acc = self.knn_validate()

@@ -1,10 +1,10 @@
 
 import os 
 import yaml 
+import torch
 import random 
 import logging 
 import numpy as np
-import tensorflow as tf
 
 COLORS = {
     "yellow": "\x1b[33m", 
@@ -72,10 +72,7 @@ class Logger:
 
 
 def count_parameters(model):
-    trainable = np.sum([np.prod(v.get_shape()) for v in model.trainable_weights])
-    non_trainable = np.sum([np.prod(v.get_shape()) for v in model.non_trainable_weights])
-    total_params = trainable + non_trainable
-    return trainable, total_params
+    return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
 def progress_bar(progress=0, desc="Progress", status="", barlen=20):
     status = status.ljust(30)
@@ -93,9 +90,16 @@ def open_config(file):
     return config 
 
 def initialize_experiment(args, output_root, seed=420):
-    tf.random.set_seed(seed)
-    np.random.seed(seed)
     random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+
+    # Some other stuff
+    torch.backends.cudnn.enabled = True
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
 
     config = open_config(args["config"])
     output_dir = os.path.join(output_root, args["output"])
@@ -113,10 +117,9 @@ def initialize_experiment(args, output_root, seed=420):
     with open(os.path.join(output_dir, "hyperparameters.txt"), "w") as f:
         f.write(yaml.dump(config))
 
-    gpus = tf.config.list_physical_devices("GPU")
-    if len(gpus) > 0:
-        logger.print("Found GPU device: {}".format(gpus[0]), mode="info")
-    else:
-        logger.print("Could not find GPU device", mode="info")
+    device = torch.device("cpu")
+    if torch.cuda.is_available():
+        device = torch.device("cuda")
+        logger.print("Found GPU device: {}".format(torch.cuda.get_device_name(0)), mode="info")
 
-    return config, output_dir, logger    
+    return config, output_dir, logger, device    

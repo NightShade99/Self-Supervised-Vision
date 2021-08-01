@@ -1,19 +1,14 @@
 
-import numpy as np 
-import tensorflow_datasets as tfds
+import torch
+import numpy as np
+from torchvision import datasets 
+from torch.utils.data import Dataset, DataLoader
 from .augmentations import get_transform
 
-DATASETS = ["cifar10", "cifar100"]
-
-
-def load_dataset_as_numpy(name):
-    assert name in DATASETS, ValueError(f"Unrecognized dataset {name}, expected one of {DATASETS}")
-    train_ds, test_ds = tfds.load(name, split=["train", "test"], as_supervised=True, batch_size=-1)
-    train_imgs, train_labels = tfds.as_numpy(train_ds)
-    test_imgs, test_labels = tfds.as_numpy(test_ds)
-    train_imgs = train_imgs.astype(np.float32) / 255.0
-    test_imgs = test_imgs.astype(np.float32) / 255.0
-    return (train_imgs, train_labels), (test_imgs, test_labels)
+DATASETS = {
+    "cifar10": datasets.CIFAR10,
+    "cifar100": datasets.CIFAR100
+}
 
 
 # ================================================================================
@@ -22,13 +17,10 @@ def load_dataset_as_numpy(name):
 
 class FeaturesDataset:
 
-    def __init__(self, features, labels, shuffle=False):
+    def __init__(self, features, labels):
         self.inputs = features
         self.labels = labels 
         self.return_items = ["features", "label"]
-        if shuffle:
-            order = np.random.permutation(np.arange(len(self.inputs)))
-            self.inputs, self.labels = self.inputs[order], self.labels[order]
 
     def __len__(self):
         return len(self.inputs)
@@ -39,65 +31,43 @@ class FeaturesDataset:
         return {"features": fvec, "label": label}
 
 
-class SimclrDataset:
+class SimclrDataset(Dataset):
 
-    def __init__(self, images, labels, transform, shuffle=False):
-        self.inputs = images 
-        self.labels = labels 
-        self.transform = transform
-        self.return_items = ["orig", "aug_1", "aug_2", "label"]
-        if shuffle:
-            order = np.random.permutation(np.arange(len(self.inputs)))
-            self.inputs, self.labels = self.inputs[order], self.labels[order]
+    def __init__(self, dataset, transforms):
+        super(SimclrDataset, self).__init__()
+        self.dataset = dataset 
+        self.train_transform = get_transform(transforms["train"])
+        self.test_transform = get_transform(transforms["test"])
+        self.return_items = ["img", "aug_1", "aug_2", "label"]
 
     def __len__(self):
-        return len(self.inputs)
+        return len(self.dataset)
 
     def __getitem__(self, idx):
-        orig_img = self.inputs[idx]
-        label = self.labels[idx]
-        aug1 = self.transform(orig_img)
-        aug2 = self.transform(orig_img)
-        return {"orig": orig_img, "aug_1": aug1, "aug_2": aug2, "label": label}
-
-
-# =======================================================================================
-# DATALOADER CLASS
-# =======================================================================================
-
-class DataLoader:
-
-    def __init__(self, dataset, batch_size):
-        self.ptr = 0
-        self.dataset = dataset
-        self.batch_size = batch_size
-
-    def __len__(self):
-        return len(self.dataset) // self.batch_size
-    
-    def get(self):
-        return_set = {k: [] for k in self.dataset.return_items}
-        for _ in range(self.batch_size):
-            for k, v in self.dataset[self.ptr].items():
-                return_set[k].append(v)
-                self.ptr += 1
-            
-            if self.ptr == len(self.dataset):
-                self.ptr = 0 
-                break
-
-        return_set = {k: np.stack(v, axis=0) for k, v in return_set.items()}
-        return return_set
+        orig_img, label = self.dataset[idx]
+        img = self.test_transform(orig_img)
+        aug1 = self.train_transform(orig_img)
+        aug2 = self.train_transform(orig_img)
+        return {"img": img, "aug_1": aug1, "aug_2": aug2, "label": label}
 
 
 # ===================================================================================================
 # DATALOADER HELPERS
 # ===================================================================================================
 
-def get_simclr_dataloaders(dataset_name, transforms, batch_size):
-    (train_imgs, train_labels), (test_imgs, test_labels) = load_dataset_as_numpy(dataset_name)
-    train_dset = SimclrDataset(images=train_imgs, labels=train_labels, transform=get_transform(transforms["train"]), shuffle=True)
-    test_dset = SimclrDataset(images=test_imgs, labels=test_labels, transform=get_transform(transforms["test"]), shuffle=False)
-    train_loader = DataLoader(train_dset, batch_size=batch_size)
-    test_loader = DataLoader(test_dset, batch_size=batch_size)
+def get_feature_dataloaders(features, labels, batch_size):
+    train_dset = FeaturesDataset(features=features, labels=labels)
+    test_dset = SimclrDataset(features=features, labels=labels)
+    train_loader = DataLoader(train_dset, batch_size=batch_size, shuffle=True)
+    test_loader = DataLoader(test_dset, batch_size=batch_size, shuffle=False)
+    return train_loader, test_loader
+
+def get_simclr_dataloaders(dataset_name, root, transforms, batch_size):
+    assert dataset_name in DATASETS.keys(), f"Unrecognized dataset {dataset_name}, expected one of {list(DATASETS.keys())}"
+    train_dset = DATASETS[dataset_name](root=root, train=True, transform=None, download=True)
+    test_dset = DATASETS[dataset_name](root=root, train=False, transform=None, download=True)
+    simclr_train_dset = SimclrDataset(dataset=train_dset, transforms=transforms)
+    simclr_test_dset = SimclrDataset(dataset=test_dset, transforms=transforms)
+    train_loader = DataLoader(simclr_train_dset, batch_size=batch_size, shuffle=True)
+    test_loader = DataLoader(simclr_test_dset, batch_size=batch_size, shuffle=False)
     return train_loader, test_loader

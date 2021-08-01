@@ -1,13 +1,8 @@
 
 import os 
 import argparse 
-import tensorflow as tf 
-
 from models import simclr
 from datetime import datetime as dt 
-
-# Disable annoying tensorflow warnings
-tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
 TASKS = ["train", "linear_eval", "get_features"]
 NETWORKS = ["resnet18", "resnet50", "resnext50", "resnext101", "wide_resnet50", "wide_resnet101"]
