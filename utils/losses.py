@@ -44,3 +44,29 @@ class SimclrLoss(nn.Module):
         logits = torch.cat((pos, neg), dim=1)                                                       # Shape (2N, 2N-1)
         loss = F.cross_entropy(logits, labels)
         return loss
+
+
+class InfoNCELoss(nn.Module):
+
+    def __init__(self, normalize=True, temperature=1.0):
+        super(InfoNCELoss, self).__init__()
+        self.normalize = normalize 
+        self.temperature = temperature
+
+    def forward(self, query, keys, memory_vectors):
+        bs = query.shape[0]
+        labels = torch.zeros((bs,)).long().to(query.device)
+        mask = torch.zeros((bs, bs), dtype=bool).fill_diagonal_(1)
+
+        if self.normalize:
+            q_norm = F.normalize(query, p=2, dim=-1)
+            k_norm = F.normalize(keys, p=2, dim=-1)
+        else:
+            q_norm = query
+            k_norm = keys
+
+        pos_logits = torch.mm(q_norm, k_norm.t())[mask].unsqueeze(-1) / self.temperature            # Shape (N, 1)
+        neg_logits = torch.mm(q_norm, memory_vectors.t()) / self.temperature                        # Shape (N, K)
+        logits = torch.cat((pos_logits, neg_logits), dim=1)                                         # Shape (N, K+1)
+        loss = F.cross_entropy(logits, labels)
+        return loss

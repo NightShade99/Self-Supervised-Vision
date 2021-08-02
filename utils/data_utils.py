@@ -31,10 +31,10 @@ class FeaturesDataset:
         return {"features": fvec, "label": label}
 
 
-class SimclrDataset(Dataset):
+class DoubleAugmentedDataset(Dataset):
 
     def __init__(self, dataset, transforms):
-        super(SimclrDataset, self).__init__()
+        super(DoubleAugmentedDataset, self).__init__()
         self.dataset = dataset 
         self.train_transform = get_transform(transforms["train"])
         self.test_transform = get_transform(transforms["test"])
@@ -62,12 +62,12 @@ def get_feature_dataloaders(features, labels, batch_size):
     test_loader = DataLoader(test_dset, batch_size=batch_size, shuffle=False)
     return train_loader, test_loader
 
-def get_simclr_dataloaders(dataset_name, root, transforms, batch_size):
+def get_double_augment_dataloaders(dataset_name, root, transforms, batch_size):
     assert dataset_name in DATASETS.keys(), f"Unrecognized dataset {dataset_name}, expected one of {list(DATASETS.keys())}"
     train_dset = DATASETS[dataset_name](root=root, train=True, transform=None, download=True)
     test_dset = DATASETS[dataset_name](root=root, train=False, transform=None, download=True)
-    simclr_train_dset = SimclrDataset(dataset=train_dset, transforms=transforms)
-    simclr_test_dset = SimclrDataset(dataset=test_dset, transforms=transforms)
+    simclr_train_dset = DoubleAugmentedDataset(dataset=train_dset, transforms=transforms)
+    simclr_test_dset = DoubleAugmentedDataset(dataset=test_dset, transforms=transforms)
     train_loader = DataLoader(simclr_train_dset, batch_size=batch_size, shuffle=True)
     test_loader = DataLoader(simclr_test_dset, batch_size=batch_size, shuffle=False)
     return train_loader, test_loader

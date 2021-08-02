@@ -20,27 +20,43 @@ NETWORKS = {
 }
 
 
-class ProjectionHead(nn.Module):
+class MemoryBank:
 
-    def __init__(self, input_dim, output_dim):
-        super(ProjectionHead, self).__init__()
-        self.fc1 = nn.Linear(input_dim, input_dim)
-        self.bn1 = nn.BatchNorm1d(input_dim)
-        self.relu = nn.ReLU()
-        self.fc2 = nn.Linear(input_dim, output_dim)
-        self.bn2 = nn.BatchNorm1d(output_dim)
+    def __init__(self, queue_size, feature_size):
+        self.bank = torch.FloatTensor(queue_size, feature_size).zero_()
+        self.bank = F.normalize(self.bank, dim=-1, p=2)
+        self.size = queue_size
+        self.ptr = 0 
+        
+    def add_batch(self, batch):
+        for row in batch:
+            self.bank[self.ptr] = row 
+            self.ptr += 1
+            if self.ptr >= self.size:
+                self.ptr = 0
 
-    def __call__(self, x):
-        x = self.relu(self.bn1(self.fc1(x)))
-        x = self.bn2(self.fc2(x))
-        return x
+    def get_vectors(self):
+        return self.bank
 
 
-class SimCLR:
+class EncoderModel(nn.Module):
+    """ This simply adds a projection head (MLP) to the backbone """
+    
+    def __init__(self, encoder, encoder_dim):
+        super(EncoderModel, self).__init__()
+        self.encoder = encoder 
+        self.relu = nn.ReLU() 
+        self.proj_head = nn.Linear(encoder_dim, encoder_dim)
+
+    def forward(self, x):
+        return self.proj_head(self.relu(self.encoder(x)))
+
+
+class MomentumContrast:
 
     def __init__(self, args):
         assert args["arch"] in NETWORKS.keys(), f"Expected 'arch' to be one of {list(NETWORKS.keys())}"
-        output_root = os.path.join("outputs/simclr", args["arch"])
+        output_root = os.path.join("outputs/moco", args["arch"])
         
         self.config, self.output_dir, self.logger, self.device = common.initialize_experiment(args, output_root)
         self.train_loader, self.test_loader = data_utils.get_double_augment_dataloaders(**self.config["data"])
@@ -48,28 +64,34 @@ class SimCLR:
         self.logger.write("Wandb url: {}".format(run.get_url()), mode="info")
 
         encoder, encoder_dim = NETWORKS[args["arch"]].values()
-        self.encoder = encoder(**self.config["encoder"]).to(self.device)
-        self.proj_head = ProjectionHead(encoder_dim, self.config["projection_head"]["proj_dim"]).to(self.device)
-        self.optim = train_utils.get_optimizer(self.config["optimizer"], params=list(self.encoder.parameters())+list(self.proj_head.parameters()))
+        self.query_encoder = EncoderModel(encoder=encoder(**self.config["encoder"]), encoder_dim=encoder_dim).to(self.device)
+        self.key_encoder = EncoderModel(encoder=encoder(**self.config["encoder"]), encoder_dim=encoder_dim).to(self.device)
+        self.memory_bank = MemoryBank(self.config["queue_size"], encoder_dim)
+        self.m = self.config.get("momentum", 0.999)
+
+        self.key_encoder.load_state_dict(self.query_encoder.state_dict())
+        for p in self.key_encoder.parameters():
+            p.requires_grad = False
+
+        self.optim = train_utils.get_optimizer(self.config["optimizer"], params=self.query_encoder.parameters())
         self.scheduler, self.warmup_epochs = train_utils.get_scheduler({**self.config["scheduler"], "epochs": self.config["epochs"]}, optimizer=self.optim)
         if self.warmup_epochs > 0:
             self.warmup_rate = (self.config["optimizer"]["lr"] - 1e-12) / self.warmup_epochs
 
-        self.loss_fn = losses.SimclrLoss(**self.config["loss_fn"])
+        self.loss_fn = losses.InfoNCELoss(**self.config["loss_fn"])
         self.best_metric = 0
         
         if args["load"] is not None:
             self.load_checkpoint(args["load"])
 
     def save_checkpoint(self):
-        state = {"encoder": self.encoder.state_dict(), "proj_head": self.proj_head.state_dict()}
+        state = {"encoder": self.encoder.state_dict()}
         torch.save(state, os.path.join(self.output_dir, "best_model.pt"))
 
     def load_checkpoint(self, ckpt_dir):
         if os.path.exists(os.path.join(ckpt_dir, "encoder")):
             state = torch.load(os.path.join(ckpt_dir, "best_model.pt"), map_location=self.device)
             self.encoder.load_state_dict(state["encoder"])
-            self.proj_head.load_state_dict(state["proj_head"])
             self.logger.print(f"Successfully loaded model from {ckpt_dir}")
         else:
             raise NotImplementedError(f"Could not find saved checkpoint at {ckpt_dir}")
@@ -83,15 +105,23 @@ class SimCLR:
         else:
             pass
 
+    @torch.no_grad()
+    def momentum_update(self):
+        for q_param, k_param in zip(self.query_encoder.parameters(), self.key_encoder.parameters()):
+            k_param.data = self.m * k_param.data + (1.0 - self.m) * q_param.data
+
     def train_step(self, batch):
         img_1, img_2 = batch["aug_1"].to(self.device), batch["aug_2"].to(self.device)
-        z_1 = self.proj_head(self.encoder(img_1))
-        z_2 = self.proj_head(self.encoder(img_2))
-        loss = self.loss_fn(z_1, z_2)
+        query = self.query_encoder(img_1)
+        keys = self.key_encoder(img_2)
+        loss = self.loss_fn(query, keys, self.memory_bank.get_vectors())
 
         self.optim.zero_grad()
         loss.backward()
         self.optim.step()        
+        
+        self.momentum_update()
+        self.memory_bank.add_batch(keys)
         return {"loss": loss.item()}
 
     @torch.no_grad()
@@ -107,7 +137,7 @@ class SimCLR:
         if split == "train":
             for step, batch in enumerate(self.train_loader):
                 img, trg = batch["img"].to(self.device), batch["label"].detach().cpu().numpy()
-                z = self.proj_head(self.encoder(img))
+                z = self.encoder(img)
                 z = F.normalize(z, dim=-1, p=2).detach().cpu().numpy()
                 fvecs.append(z), gt.append(trg)
                 common.progress_bar(progress=(step+1)/len(self.train_loader), desc="Building train features")
@@ -116,7 +146,7 @@ class SimCLR:
         elif split == "test":
             for step, batch in enumerate(self.test_loader):
                 img, trg = batch["img"].to(self.device), batch["label"].detach().cpu().numpy()
-                z = self.proj_head(self.encoder(img))
+                z = self.encoder(img)
                 z = F.normalize(z, dim=-1, p=2).detach().cpu().numpy()
                 fvecs.append(z), gt.append(trg)
                 common.progress_bar(progress=(step+1)/len(self.test_loader), desc="Building test features")
@@ -144,7 +174,6 @@ class SimCLR:
         for epoch in range(1, self.config["epochs"]+1):
             train_meter = common.AverageMeter()
             desc_str = "[TRAIN] Epoch {:4d}/{:4d}".format(epoch, self.config["epochs"])
-            self.adjust_learning_rate(epoch)
 
             for step, batch in enumerate(self.train_loader):
                 train_metrics = self.train_step(batch)
@@ -154,6 +183,7 @@ class SimCLR:
             print()
             self.logger.write("[TRAIN] Epoch {:4d}/{:4d} ".format(epoch, self.config["epochs"]) + train_meter.return_msg(), mode="train")
             wandb.log({"Train accuracy": train_meter.return_dict()["accuracy"]})
+            self.adjust_learning_rate(epoch)
 
             if epoch % self.config["eval_every"] == 0:
                 knn_acc = self.knn_validate()
@@ -165,4 +195,4 @@ class SimCLR:
                     self.save_checkpoint()
         print()
         self.logger.print("Completed training. Beginning linear evaluation.", mode="info")
-        self.perform_linear_eval()        
+        self.perform_linear_eval()       

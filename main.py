@@ -1,13 +1,16 @@
 
 import os 
 import argparse 
-from models import simclr
 from datetime import datetime as dt 
+from models import (
+    simclr, moco
+)
 
 TASKS = ["train", "linear_eval", "get_features"]
 NETWORKS = ["resnet18", "resnet50", "resnext50", "resnext101", "wide_resnet50", "wide_resnet101"]
 ALGORITHMS = {
-    "simclr": simclr.SimCLR
+    "simclr": simclr.SimCLR,
+    "moco": moco.MomentumContrast,
 }
 
 def _check_checkpoint_specified(args):
