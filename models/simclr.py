@@ -153,7 +153,6 @@ class SimCLR:
                 common.progress_bar(progress=(step+1)/len(self.train_loader), desc=desc_str, status=train_meter.return_msg())
             print()
             self.logger.write("[TRAIN] Epoch {:4d}/{:4d} ".format(epoch, self.config["epochs"]) + train_meter.return_msg(), mode="train")
-            wandb.log({"Train accuracy": train_meter.return_dict()["accuracy"]})
 
             if epoch % self.config["eval_every"] == 0:
                 knn_acc = self.knn_validate()
