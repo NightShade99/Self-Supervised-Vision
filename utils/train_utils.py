@@ -9,12 +9,11 @@ def get_optimizer(config, params):
     """
     name = config.get("name", "sgd")
     if name == "sgd":
-        optim = optim.SGD(params=params, lr=config["lr"], weight_decay=config["weight_decay"], momentum=0.9, nesterov=True)
+        return optim.SGD(params=params, lr=config["lr"], weight_decay=config["weight_decay"], momentum=0.9, nesterov=True)
     elif name == "adam":
-        optim = optim.Adam(params=params, lr=config["lr"], weight_decay=config["weight_decay"])
+        return optim.Adam(params=params, lr=config["lr"], weight_decay=config["weight_decay"])
     else:
-        raise NotImplementedError(f"Invalid optimizer {name}")
-    return optim 
+        raise NotImplementedError(f"Invalid optimizer {name}") 
 
 def get_scheduler(config, optimizer):
     """
