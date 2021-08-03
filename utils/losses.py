@@ -14,7 +14,7 @@ class SimclrLoss(nn.Module):
 
     def forward(self, zi, zj):
         bs = zi.shape[0]
-        labels = torch.zeros(2 * bs).long().to(zi.device)
+        labels = torch.zeros((2*bs,)).long().to(zi.device)
         mask = torch.ones((bs, bs), dtype=bool).fill_diagonal_(0)
 
         if self.normalize:
@@ -56,7 +56,7 @@ class InfoNCELoss(nn.Module):
     def forward(self, query, keys, memory_vectors):
         bs = query.shape[0]
         labels = torch.zeros((bs,)).long().to(query.device)
-        mask = torch.zeros((bs, bs), dtype=bool).fill_diagonal_(1)
+        mask = torch.zeros((bs, bs), dtype=bool, device=query.device).fill_diagonal_(1)
 
         if self.normalize:
             q_norm = F.normalize(query, p=2, dim=-1)

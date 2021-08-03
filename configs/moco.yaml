@@ -9,7 +9,7 @@ queue_size: 2000
 data:
   dataset_name: cifar10
   root: data/cifar10
-  batch_size: 256
+  batch_size: 512
   transforms:
     train:
       color_jitter:
@@ -40,7 +40,7 @@ encoder:
   reduce_bottom_conv: True
 
 projection_head:
-  proj_dim: 2048
+  proj_dim: 128
   
 optimizer:
   name: sgd
@@ -50,10 +50,8 @@ optimizer:
   weight_decay: 1.0e-04
   
 scheduler:
-  name: multistep
-  milestones: [120, 160]
-  gamma: 0.1
-  warmup_epochs: 0
+  name: cosine
+  warmup_epochs: 10
 
 loss_fn:
   normalize: True
@@ -61,7 +59,7 @@ loss_fn:
 
 linear_eval:
   epochs: 100
-  input_dim: 2048
+  input_dim: 128
   batch_size: 256
   lr: 0.1
 

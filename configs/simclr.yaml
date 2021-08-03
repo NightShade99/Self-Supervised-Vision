@@ -7,7 +7,7 @@ eval_every: 10
 data:
   dataset_name: cifar10
   root: data/cifar10
-  batch_size: 256
+  batch_size: 512
   transforms:
     train:
       color_jitter:
@@ -18,9 +18,6 @@ data:
         apply_prob: 0.8
       random_gray:
         p: 0.2
-      gaussian_blur:
-        sigma: [0.1, 2.0]
-        apply_prob: 0.5
       random_resized_crop:
         size: [32, 32]
         scale: [0.2, 1.0]
@@ -41,14 +38,14 @@ encoder:
   reduce_bottom_conv: True
 
 projection_head:
-  proj_dim: 2048
+  proj_dim: 128
   
 optimizer:
   name: sgd
-  lr: 0.5
+  lr: 2.0
   momentum: 0.9
   nesterov: True
-  weight_decay: 1.0e-06
+  weight_decay: 1.0e-04
   
 scheduler:
   name: cosine
@@ -60,7 +57,7 @@ loss_fn:
 
 linear_eval:
   epochs: 100
-  input_dim: 2048
+  input_dim: 128
   batch_size: 256
   lr: 0.1
 

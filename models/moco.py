@@ -114,7 +114,7 @@ class MomentumContrast:
         img_1, img_2 = batch["aug_1"].to(self.device), batch["aug_2"].to(self.device)
         query = self.query_encoder(img_1)
         keys = self.key_encoder(img_2)
-        loss = self.loss_fn(query, keys, self.memory_bank.get_vectors())
+        loss = self.loss_fn(query, keys, self.memory_bank.get_vectors().to(self.device))
 
         self.optim.zero_grad()
         loss.backward()
@@ -182,7 +182,6 @@ class MomentumContrast:
                 common.progress_bar(progress=(step+1)/len(self.train_loader), desc=desc_str, status=train_meter.return_msg())
             print()
             self.logger.write("[TRAIN] Epoch {:4d}/{:4d} ".format(epoch, self.config["epochs"]) + train_meter.return_msg(), mode="train")
-            wandb.log({"Train accuracy": train_meter.return_dict()["accuracy"]})
             self.adjust_learning_rate(epoch)
 
             if epoch % self.config["eval_every"] == 0:
