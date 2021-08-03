@@ -30,7 +30,7 @@ class MemoryBank:
         
     def add_batch(self, batch):
         for row in batch:
-            self.bank[self.ptr] = row 
+            self.bank[self.ptr] = F.normalize(row, dim=-1, p=2) 
             self.ptr += 1
             if self.ptr >= self.size:
                 self.ptr = 0
