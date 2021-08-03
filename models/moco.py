@@ -85,13 +85,13 @@ class MomentumContrast:
             self.load_checkpoint(args["load"])
 
     def save_checkpoint(self):
-        state = {"encoder": self.encoder.state_dict()}
+        state = {"encoder": self.query_encoder.state_dict()}
         torch.save(state, os.path.join(self.output_dir, "best_model.pt"))
 
     def load_checkpoint(self, ckpt_dir):
         if os.path.exists(os.path.join(ckpt_dir, "encoder")):
             state = torch.load(os.path.join(ckpt_dir, "best_model.pt"), map_location=self.device)
-            self.encoder.load_state_dict(state["encoder"])
+            self.query_encoder.load_state_dict(state["encoder"])
             self.logger.print(f"Successfully loaded model from {ckpt_dir}")
         else:
             raise NotImplementedError(f"Could not find saved checkpoint at {ckpt_dir}")
@@ -137,7 +137,7 @@ class MomentumContrast:
         if split == "train":
             for step, batch in enumerate(self.train_loader):
                 img, trg = batch["img"].to(self.device), batch["label"].detach().cpu().numpy()
-                z = self.encoder(img)
+                z = self.query_encoder(img)
                 z = F.normalize(z, dim=-1, p=2).detach().cpu().numpy()
                 fvecs.append(z), gt.append(trg)
                 common.progress_bar(progress=(step+1)/len(self.train_loader), desc="Building train features")
@@ -146,7 +146,7 @@ class MomentumContrast:
         elif split == "test":
             for step, batch in enumerate(self.test_loader):
                 img, trg = batch["img"].to(self.device), batch["label"].detach().cpu().numpy()
-                z = self.encoder(img)
+                z = self.query_encoder(img)
                 z = F.normalize(z, dim=-1, p=2).detach().cpu().numpy()
                 fvecs.append(z), gt.append(trg)
                 common.progress_bar(progress=(step+1)/len(self.test_loader), desc="Building test features")
