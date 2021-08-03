@@ -1,0 +1,62 @@
+
+# Configuration file for SimCLR training
+
+epochs: 1000
+eval_every: 10
+tau: 0.996
+
+data:
+  dataset_name: cifar10
+  root: data/cifar10
+  batch_size: 512
+  transforms:
+    train:
+      color_jitter:
+        brightness: 0.4
+        contrast: 0.4
+        saturation: 0.4
+        hue: 0.1
+        apply_prob: 0.8
+      random_gray:
+        p: 0.2
+      random_resized_crop:
+        size: [32, 32]
+        scale: [0.2, 1.0]
+      random_flip:
+      to_tensor:
+      normalize:
+        mean: [0.4914, 0.4822, 0.4465]
+        std: [0.2470, 0.2435, 0.2616]
+    test:
+      center_crop:
+        size: [32, 32]
+      to_tensor:
+      normalize:
+        mean: [0.4914, 0.4822, 0.4465]
+        std: [0.2470, 0.2435, 0.2616]
+
+encoder:
+  reduce_bottom_conv: True
+
+projection_head:
+  proj_dim: 128
+  
+optimizer:
+  name: sgd
+  lr: 0.2
+  momentum: 0.9
+  nesterov: True
+  weight_decay: 1.0e-04
+  
+scheduler:
+  name: cosine
+  warmup_epochs: 10
+
+linear_eval:
+  epochs: 100
+  input_dim: 128
+  batch_size: 256
+  lr: 0.1
+
+wandb:
+  project: self-supervised-vision

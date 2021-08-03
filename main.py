@@ -3,7 +3,7 @@ import os
 import argparse 
 from datetime import datetime as dt 
 from models import (
-    simclr, moco
+    simclr, moco, byol
 )
 
 TASKS = ["train", "linear_eval", "get_features"]
@@ -11,6 +11,7 @@ NETWORKS = ["resnet18", "resnet50", "resnext50", "resnext101", "wide_resnet50", 
 ALGORITHMS = {
     "simclr": simclr.SimCLR,
     "moco": moco.MomentumContrast,
+    "byol": byol.BootstrapYourOwnLatent
 }
 
 def _check_checkpoint_specified(args):
