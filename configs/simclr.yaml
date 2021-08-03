@@ -1,7 +1,7 @@
 
 # Configuration file for SimCLR training
 
-epochs: 500
+epochs: 1000
 eval_every: 10
 
 data:
@@ -52,7 +52,7 @@ scheduler:
   warmup_epochs: 10
 
 loss_fn:
-  normalize: False
+  normalize: True
   temperature: 0.5
 
 linear_eval:
