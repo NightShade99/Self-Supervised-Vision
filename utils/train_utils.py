@@ -9,12 +9,12 @@ def get_optimizer(config, params):
     """
     name = config.get("name", "sgd")
     if name == "sgd":
-        return optim.SGD(params=params, lr=config["lr"], weight_decay=config["weight_decay"], momentum=0.9, nesterov=True)
+        optim = optim.SGD(params=params, lr=config["lr"], weight_decay=config["weight_decay"], momentum=0.9, nesterov=True)
     elif name == "adam":
-        return optim.Adam(params=params, lr=config["lr"], weight_decay=config["weight_decay"])
+        optim = optim.Adam(params=params, lr=config["lr"], weight_decay=config["weight_decay"])
     else:
         raise NotImplementedError(f"Invalid optimizer {name}")
-
+    return optim 
 
 def get_scheduler(config, optimizer):
     """
@@ -25,7 +25,7 @@ def get_scheduler(config, optimizer):
 
     if warmup_epochs > 0:
         for group in optimizer.param_groups:
-            group["lr"] = 1e-12 / warmup_epochs * group["lr"]
+            group["lr"] = 1e-12
 
     if name is not None:
         if name == "cosine":

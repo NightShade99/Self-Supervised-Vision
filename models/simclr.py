@@ -144,7 +144,6 @@ class SimCLR:
         for epoch in range(1, self.config["epochs"]+1):
             train_meter = common.AverageMeter()
             desc_str = "[TRAIN] Epoch {:4d}/{:4d}".format(epoch, self.config["epochs"])
-            self.adjust_learning_rate(epoch)
 
             for step, batch in enumerate(self.train_loader):
                 train_metrics = self.train_step(batch)
@@ -153,6 +152,7 @@ class SimCLR:
                 common.progress_bar(progress=(step+1)/len(self.train_loader), desc=desc_str, status=train_meter.return_msg())
             print()
             self.logger.write("[TRAIN] Epoch {:4d}/{:4d} ".format(epoch, self.config["epochs"]) + train_meter.return_msg(), mode="train")
+            self.adjust_learning_rate(epoch)
 
             if epoch % self.config["eval_every"] == 0:
                 knn_acc = self.knn_validate()
