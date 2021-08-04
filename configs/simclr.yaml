@@ -3,6 +3,7 @@
 
 epochs: 1000
 eval_every: 10
+proj_dim: 128
 
 data:
   dataset_name: cifar10
@@ -36,9 +37,6 @@ data:
 
 encoder:
   reduce_bottom_conv: True
-
-projection_head:
-  proj_dim: 128
   
 optimizer:
   name: sgd

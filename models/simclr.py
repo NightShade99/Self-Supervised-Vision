@@ -49,7 +49,7 @@ class SimCLR:
 
         encoder, encoder_dim = NETWORKS[args["arch"]].values()
         self.encoder = encoder(**self.config["encoder"]).to(self.device)
-        self.proj_head = ProjectionHead(encoder_dim, self.config["projection_head"]["proj_dim"]).to(self.device)
+        self.proj_head = ProjectionHead(encoder_dim, self.config["proj_dim"]).to(self.device)
         self.optim = train_utils.get_optimizer(self.config["optimizer"], params=list(self.encoder.parameters())+list(self.proj_head.parameters()))
         self.scheduler, self.warmup_epochs = train_utils.get_scheduler({**self.config["scheduler"], "epochs": self.config["epochs"]}, optimizer=self.optim)
         if self.warmup_epochs > 0:

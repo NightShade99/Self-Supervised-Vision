@@ -42,11 +42,11 @@ class MemoryBank:
 class EncoderModel(nn.Module):
     """ This simply adds a projection head (MLP) to the backbone """
     
-    def __init__(self, encoder, encoder_dim):
+    def __init__(self, encoder, encoder_dim, projection_dim):
         super(EncoderModel, self).__init__()
         self.encoder = encoder 
         self.relu = nn.ReLU() 
-        self.proj_head = nn.Linear(encoder_dim, encoder_dim)
+        self.proj_head = nn.Linear(encoder_dim, projection_dim)
 
     def forward(self, x):
         return self.proj_head(self.relu(self.encoder(x)))
@@ -64,8 +64,8 @@ class MomentumContrast:
         self.logger.write("Wandb url: {}".format(run.get_url()), mode="info")
 
         encoder, encoder_dim = NETWORKS[args["arch"]].values()
-        self.query_encoder = EncoderModel(encoder=encoder(**self.config["encoder"]), encoder_dim=encoder_dim).to(self.device)
-        self.key_encoder = EncoderModel(encoder=encoder(**self.config["encoder"]), encoder_dim=encoder_dim).to(self.device)
+        self.query_encoder = EncoderModel(encoder(**self.config["encoder"]), encoder_dim, self.config["proj_dim"]).to(self.device)
+        self.key_encoder = EncoderModel(encoder(**self.config["encoder"]), encoder_dim, self.config["proj_dim"]).to(self.device)
         self.memory_bank = MemoryBank(self.config["queue_size"], encoder_dim)
         self.m = self.config.get("momentum", 0.999)
 

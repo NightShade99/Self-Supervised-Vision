@@ -29,33 +29,34 @@ class MLP(nn.Module):
         self.bn1 = nn.BatchNorm1d(input_dim)
         self.relu = nn.ReLU()
         self.fc2 = nn.Linear(input_dim, output_dim)
-        self.bn2 = nn.BatchNorm1d(input_dim)
 
     def forward(self, x):
-        return self.bn2(self.fc2(self.relu(self.bn1(self.fc1(x))))) 
+        return self.fc2(self.relu(self.bn1(self.fc1(x))))
 
 
 class OnlineNetwork(nn.Module):
     
-    def __init__(self, encoder, encoder_dim):
+    def __init__(self, encoder, encoder_dim, projection_dim):
         super(OnlineNetwork, self).__init__()
         self.encoder = encoder 
-        self.proj_head = MLP(encoder_dim, encoder_dim)
-        self.pred_head = MLP(encoder_dim, encoder_dim)
+        self.proj_head = MLP(encoder_dim, projection_dim)
+        self.pred_head = MLP(projection_dim, projection_dim)
 
     def forward(self, x):
-        return self.pred_head(self.proj_head(self.encoder(x)))
+        x = self.pred_head(self.proj_head(self.encoder(x)))
+        return F.normalize(x, dim=-1, p=2)
 
 
 class TargetNetwork(nn.Module):
 
-    def __init__(self, encoder, encoder_dim):
+    def __init__(self, encoder, encoder_dim, projection_dim):
         super(TargetNetwork, self).__init__()
         self.encoder = encoder 
-        self.proj_head = MLP(encoder_dim, encoder_dim)
+        self.proj_head = MLP(encoder_dim, projection_dim)
 
     def forward(self, x):
-        return self.proj_head(self.encoder(x))
+        x = self.proj_head(self.encoder(x))
+        return F.normalize(x, dim=-1, p=2)
 
 
 class BootstrapYourOwnLatent:
@@ -70,8 +71,8 @@ class BootstrapYourOwnLatent:
         self.logger.write("Wandb url: {}".format(run.get_url()), mode="info")
 
         encoder, encoder_dim = NETWORKS[args["arch"]].values()
-        self.online_network = OnlineNetwork(encoder=encoder(**self.config["encoder"]), encoder_dim=encoder_dim).to(self.device)
-        self.target_network = TargetNetwork(encoder=encoder(**self.config["encoder"]), encoder_dim=encoder_dim).to(self.device)
+        self.online_network = OnlineNetwork(encoder(**self.config["encoder"]), encoder_dim, self.config["proj_dim"]).to(self.device)
+        self.target_network = TargetNetwork(encoder(**self.config["encoder"]), encoder_dim, self.config["proj_dim"]).to(self.device)
         self.max_steps = self.config["epochs"] * len(self.train_loader)
         self.tau = self.config.get("tau", 0.996)
  
