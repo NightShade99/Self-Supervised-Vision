@@ -66,7 +66,7 @@ class MomentumContrast:
         encoder, encoder_dim = NETWORKS[args["arch"]].values()
         self.query_encoder = EncoderModel(encoder(**self.config["encoder"]), encoder_dim, self.config["proj_dim"]).to(self.device)
         self.key_encoder = EncoderModel(encoder(**self.config["encoder"]), encoder_dim, self.config["proj_dim"]).to(self.device)
-        self.memory_bank = MemoryBank(self.config["queue_size"], encoder_dim)
+        self.memory_bank = MemoryBank(self.config["queue_size"], self.config["proj_dim"])
         self.m = self.config.get("momentum", 0.999)
 
         self.key_encoder.load_state_dict(self.query_encoder.state_dict())
