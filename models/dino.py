@@ -83,7 +83,7 @@ class DistillationWithNoLabels:
         if self.warmup_epochs > 0:
             self.warmup_rate = (self.config["optimizer"]["lr"] - 1e-12) / self.warmup_epochs 
 
-        self.loss_fn = losses.DINOLoss()
+        self.loss_fn = losses.DinoLoss()
         self.best_metric = 0
 
         if args["load"] is not None:

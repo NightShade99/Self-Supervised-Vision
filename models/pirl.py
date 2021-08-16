@@ -19,79 +19,85 @@ NETWORKS = {
     "wide_resnet101": {"net": resnet.wide_resnet101_2, "dim": 2048}
 }
 
-
 class MemoryBank:
 
-    def __init__(self, queue_size, feature_size):
-        self.bank = torch.FloatTensor(queue_size, feature_size).zero_()
+    def __init__(self, data_size, feature_size, momentum=0.5):
+        self.bank = torch.FloatTensor(data_size, feature_size).zero_()
         self.bank = F.normalize(self.bank, dim=-1, p=2)
-        self.size = queue_size
+        self.size = data_size
+        self.m = momentum
         self.ptr = 0 
         
-    def add_batch(self, batch):
-        for row in batch:
-            self.bank[self.ptr] = F.normalize(row, dim=-1, p=2) 
-            self.ptr += 1
-            if self.ptr >= self.size:
-                self.ptr = 0
+    def update_vectors(self, indices, new_vectors):
+        new_vectors = F.normalize(new_vectors, p=2, dim=-1)
+        self.bank[indices] = self.m * self.bank[indices] + (1 - self.m) * new_vectors
 
-    def get_vectors(self):
-        return self.bank
+    def get_vectors(self, indices):
+        return self.bank[indices]
 
 
 class EncoderModel(nn.Module):
-    """ This simply adds a projection head (MLP) to the backbone """
     
-    def __init__(self, encoder, encoder_dim, projection_dim):
+    def __init__(self, encoder, encoder_dim, projection_dim, patch_size, num_patches):
         super(EncoderModel, self).__init__()
         self.encoder = encoder 
-        self.relu = nn.ReLU() 
-        self.proj_head = nn.Linear(encoder_dim, projection_dim)
+        self.patch_size = patch_size
+        self.f_proj_head = nn.Linear(encoder_dim, projection_dim)
+        self.g_proj_head_initial = nn.Linear(encoder_dim, projection_dim)
+        self.g_proj_head_final = nn.Linear(projection_dim * num_patches, projection_dim)
 
-    def forward(self, x):
-        return self.proj_head(self.relu(self.encoder(x)))
+    def forward(self, imgs):
+        # Patchwise feature extraction and random concatenation
+        # for Jigsaw task is performed in this module
+        # imgs is non-transformed image tensor of shape (bs, c, h, w)
+        patch_features = []
+        bs, c, h, w = imgs.size()
+        w_offsets = [(i*self.patch_size, (i+1)*self.patch_size) for i in range(w // self.patch_size)]
+        h_offsets = [(i*self.patch_size, (i+1)*self.patch_size) for i in range(h // self.patch_size)]
+        for x1, x2 in w_offsets:
+            for y1, y2 in h_offsets:
+                patch_features.append(self.g_proj_head_initial(self.encoder(imgs[:, :, y1:y2, x1:x2])))               
+        patch_features = torch.cat(patch_features, 1)
+        patch_features = self.g_proj_head_final(patch_features)
+        image_features = self.f_proj_head(self.encoder(imgs))
+        return image_features, patch_features 
 
 
-class MomentumContrast:
+class PretextInvariantRepresentationModel:
 
     def __init__(self, args):
         assert args["arch"] in NETWORKS.keys(), f"Expected 'arch' to be one of {list(NETWORKS.keys())}"
-        output_root = os.path.join("outputs/moco", args["arch"])
+        output_root = os.path.join("outputs/pirl", args["arch"])
         
         self.config, self.output_dir, self.logger, self.device = common.initialize_experiment(args, output_root)
-        self.train_loader, self.test_loader = data_utils.get_double_augment_dataloaders(**self.config["data"])
+        self.train_loader, self.test_loader = data_utils.get_indexed_dataloaders(**self.config["data"])
         run = wandb.init(**self.config["wandb"])
         self.logger.write("Wandb url: {}".format(run.get_url()), mode="info")
 
         encoder, encoder_dim = NETWORKS[args["arch"]].values()
-        self.query_encoder = EncoderModel(encoder(**self.config["encoder"]), encoder_dim, self.config["proj_dim"]).to(self.device)
-        self.key_encoder = EncoderModel(encoder(**self.config["encoder"]), encoder_dim, self.config["proj_dim"]).to(self.device)
-        self.memory_bank = MemoryBank(self.config["queue_size"], self.config["proj_dim"])
-        self.m = self.config.get("momentum", 0.999)
+        self.model = EncoderModel(
+            encoder(**self.config["encoder"]), encoder_dim, self.config["proj_dim"], self.config["patch_size"], self.config["num_patches"]).to(self.device)
+        self.memory_bank = MemoryBank(len(self.train_loader.dataset), self.config["proj_dim"], self.config["momentum"])
 
-        self.key_encoder.load_state_dict(self.query_encoder.state_dict())
-        for p in self.key_encoder.parameters():
-            p.requires_grad = False
-
-        self.optim = train_utils.get_optimizer(self.config["optimizer"], params=self.query_encoder.parameters())
+        self.optim = train_utils.get_optimizer(self.config["optimizer"], params=self.model.parameters())
         self.scheduler, self.warmup_epochs = train_utils.get_scheduler({**self.config["scheduler"], "epochs": self.config["epochs"]}, optimizer=self.optim)
         if self.warmup_epochs > 0:
             self.warmup_rate = (self.config["optimizer"]["lr"] - 1e-12) / self.warmup_epochs
 
-        self.loss_fn = losses.MocoLoss(**self.config["loss_fn"])
+        self.loss_fn = losses.PirlLoss(**self.config["loss_fn"])
         self.best_metric = 0
         
         if args["load"] is not None:
             self.load_checkpoint(args["load"])
 
     def save_checkpoint(self):
-        state = {"encoder": self.query_encoder.state_dict()}
+        state = {"encoder": self.model.state_dict()}
         torch.save(state, os.path.join(self.output_dir, "best_model.pt"))
 
     def load_checkpoint(self, ckpt_dir):
         if os.path.exists(os.path.join(ckpt_dir, "encoder")):
             state = torch.load(os.path.join(ckpt_dir, "best_model.pt"), map_location=self.device)
-            self.query_encoder.load_state_dict(state["encoder"])
+            self.model.load_state_dict(state["encoder"])
             self.logger.print(f"Successfully loaded model from {ckpt_dir}")
         else:
             raise NotImplementedError(f"Could not find saved checkpoint at {ckpt_dir}")
@@ -105,23 +111,15 @@ class MomentumContrast:
         else:
             pass
 
-    @torch.no_grad()
-    def momentum_update(self):
-        for q_param, k_param in zip(self.query_encoder.parameters(), self.key_encoder.parameters()):
-            k_param.data = self.m * k_param.data + (1.0 - self.m) * q_param.data
-
     def train_step(self, batch):
-        img_1, img_2 = batch["aug_1"].to(self.device), batch["aug_2"].to(self.device)
-        query = self.query_encoder(img_1)
-        keys = self.key_encoder(img_2)
-        loss = self.loss_fn(query, keys, self.memory_bank.get_vectors().to(self.device))
+        indices, img = batch["index"], batch["img"].to(self.device)
+        img_features, patch_features = self.model(img)
+        loss = self.loss_fn(img_features, patch_features, self.memory_bank.get_vectors(indices).to(self.device))
+        self.memory_bank.update_vectors(indices, img_features)
 
         self.optim.zero_grad()
         loss.backward()
         self.optim.step()        
-        
-        self.momentum_update()
-        self.memory_bank.add_batch(keys)
         return {"loss": loss.item()}
 
     @torch.no_grad()
@@ -137,7 +135,7 @@ class MomentumContrast:
         if split == "train":
             for step, batch in enumerate(self.train_loader):
                 img, trg = batch["img"].to(self.device), batch["label"].detach().cpu().numpy()
-                z = self.query_encoder(img)
+                z = self.model(img)[0]
                 z = F.normalize(z, dim=-1, p=2).detach().cpu().numpy()
                 fvecs.append(z), gt.append(trg)
                 common.progress_bar(progress=(step+1)/len(self.train_loader), desc="Building train features")
@@ -146,7 +144,7 @@ class MomentumContrast:
         elif split == "test":
             for step, batch in enumerate(self.test_loader):
                 img, trg = batch["img"].to(self.device), batch["label"].detach().cpu().numpy()
-                z = self.query_encoder(img)
+                z = self.model(img)[0]
                 z = F.normalize(z, dim=-1, p=2).detach().cpu().numpy()
                 fvecs.append(z), gt.append(trg)
                 common.progress_bar(progress=(step+1)/len(self.test_loader), desc="Building test features")
@@ -194,4 +192,4 @@ class MomentumContrast:
                     self.save_checkpoint()
         print()
         self.logger.print("Completed training. Beginning linear evaluation.", mode="info")
-        self.perform_linear_eval()       
+        self.perform_linear_eval()  

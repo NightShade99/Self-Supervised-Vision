@@ -46,7 +46,7 @@ class SimclrLoss(nn.Module):
         return loss
 
 
-class InfoNCELoss(nn.Module):
+class MocoLoss(nn.Module):
 
     def __init__(self, normalize=True, temperature=1.0):
         super(InfoNCELoss, self).__init__()
@@ -72,7 +72,7 @@ class InfoNCELoss(nn.Module):
         return loss
 
 
-class DINOLoss(nn.Module):
+class DinoLoss(nn.Module):
 
     def __init__(self):
         super(DINOLoss, self).__init__()
@@ -87,3 +87,30 @@ class DINOLoss(nn.Module):
         loss_1 = -(targets_1 * F.log_softmax(student_fvecs / temp_s, -1)).sum(-1).mean()         
         loss_2 = -(targets_2 * F.log_softmax(student_fvecs / temp_s, -1)).sum(-1).mean()
         return loss_1 + loss_2
+
+
+class PirlLoss(nn.Module):
+
+    def __init__(self, normalize=True, temperature=1.0):
+        super(PirlLoss, self).__init__()
+        self.normalize = normalize 
+        self.temp = temperature
+
+    def forward(self, img_features, patch_features, memory_vectors):
+        if self.normalize:
+            v_img = F.normalize(img_features, p=2, dim=-1)
+            v_patch = F.normalize(patch_features, p=2, dim=-1)
+        else:
+            v_img = img_features
+            v_patch = patch_features 
+
+        bs = img_features.size(0)
+        mask = torch.zeros(bs, bs).fill_diagonal_(1).bool().to(img_features.device)
+
+        pos_logits = torch.mm(v_img, v_patch.t()) / self.temp                                       
+        neg_logits = torch.mm(v_patch, memory_vectors.t()) / self.temp
+        pos_logits = pos_logits[mask].view(bs, 1)                                               # (bs, 1)
+        neg_logits = neg_logits[torch.logical_not(mask)].view(bs, -1)                           # (bs, bs-1)
+        logits = torch.cat((pos_logits, neg_logits), 1)                                         # (bs, bs)
+        labels = torch.ones(bs).long().to(img_features.device)
+        return F.cross_entropy(logits, labels)

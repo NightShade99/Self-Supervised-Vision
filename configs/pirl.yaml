@@ -1,35 +1,19 @@
 
-# Configuration file for MoCo training
+# Configuration file for PIRL training
 
 epochs: 1000
 eval_every: 10
-momentum: 0.999
-queue_size: 1000
+momentum: 0.5
 proj_dim: 128
+patch_size: 8
+num_patches: 16
 
 data:
   dataset_name: cifar10
   root: data/cifar10
   batch_size: 256
   transforms:
-    train:
-      color_jitter:
-        brightness: 0.4
-        contrast: 0.4
-        saturation: 0.4
-        hue: 0.1
-        apply_prob: 0.8
-      random_gray:
-        p: 0.2
-      random_resized_crop:
-        size: [32, 32]
-        scale: [0.2, 1.0]
-      random_flip:
-      to_tensor:
-      normalize:
-        mean: [0.4914, 0.4822, 0.4465]
-        std: [0.2470, 0.2435, 0.2616]
-    test:
+    standard:
       center_crop:
         size: [32, 32]
       to_tensor:
@@ -42,7 +26,7 @@ encoder:
   
 optimizer:
   name: sgd
-  lr: 0.03
+  lr: 0.1
   momentum: 0.9
   nesterov: True
   weight_decay: 1.0e-04
