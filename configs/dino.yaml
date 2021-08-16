@@ -1,17 +1,30 @@
 
-# Configuration file for BYOL training
+# Configuration file for DINO training
 
 epochs: 1000
-eval_every: 10
-tau: 0.996
-proj_dim: 128
+eval_every: 5
+
+teacher_temp_lower: 0.04
+teacher_temp_upper: 0.07
+student_temp: 0.1
+center_momentum: 0.9
+weight_decay_upper: 0.4
+weight_decay_lower: 0.04
+lambda_upper: 1.0
+lambda_lower: 0.996
+gradient_clip: 3.0
 
 data:
   dataset_name: cifar10
   root: data/cifar10
-  batch_size: 512
-  transforms:
-    train:
+  batch_size: 64
+  multicrop_config:
+    num_local_views: 6
+    num_global_views: 2
+    global_size: [32, 32]
+    local_size: [8, 8]
+    scale_threshold: 0.3
+    train_transforms:
       color_jitter:
         brightness: 0.4
         contrast: 0.4
@@ -28,7 +41,7 @@ data:
       normalize:
         mean: [0.4914, 0.4822, 0.4465]
         std: [0.2470, 0.2435, 0.2616]
-    test:
+    test_transforms:
       center_crop:
         size: [32, 32]
       to_tensor:
@@ -37,14 +50,25 @@ data:
         std: [0.2470, 0.2435, 0.2616]
 
 encoder:
-  reduce_bottom_conv: True
+  hidden_dim: 384
+  embedding_dim: 192
+  intermediate_dim: 768
+  num_attention_heads: 6
+  patch_size: 4
+  num_local_patches: 4
+  num_global_patches: 64
+  num_encoder_layers: 6
+
+proj_head:
+  hidden_dim: 512
+  proj_dim: 1024
 
 optimizer:
-  name: sgd
-  lr: 0.2
-  momentum: 0.9
-  nesterov: True
-  weight_decay: 1.0e-04
+  name: adamw
+  lr: 1.0e-04
+  amsgrad: False
+  epsilon: 1.0e-06
+  weight_decay: 0.04
   
 scheduler:
   name: cosine

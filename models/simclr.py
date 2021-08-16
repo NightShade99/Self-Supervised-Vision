@@ -151,7 +151,7 @@ class SimCLR:
                 train_meter.add(train_metrics)
                 common.progress_bar(progress=(step+1)/len(self.train_loader), desc=desc_str, status=train_meter.return_msg())
             print()
-            self.logger.write("[TRAIN] Epoch {:4d}/{:4d} ".format(epoch, self.config["epochs"]) + train_meter.return_msg(), mode="train")
+            self.logger.write("Epoch {:4d}/{:4d} ".format(epoch, self.config["epochs"]) + train_meter.return_msg(), mode="train")
             self.adjust_learning_rate(epoch)
 
             if epoch % self.config["eval_every"] == 0:

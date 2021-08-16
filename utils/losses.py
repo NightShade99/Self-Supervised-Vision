@@ -65,8 +65,25 @@ class InfoNCELoss(nn.Module):
             q_norm = query
             k_norm = keys
 
-        pos_logits = torch.mm(q_norm, k_norm.t())[mask].unsqueeze(-1) / self.temperature            # Shape (N, 1)
-        neg_logits = torch.mm(q_norm, memory_vectors.t()) / self.temperature                        # Shape (N, K)
-        logits = torch.cat((pos_logits, neg_logits), dim=1)                                         # Shape (N, K+1)
+        pos_logits = torch.mm(q_norm, k_norm.t())[mask].unsqueeze(-1) / self.temperature                # Shape (N, 1)
+        neg_logits = torch.mm(q_norm, memory_vectors.t()) / self.temperature                            # Shape (N, K)
+        logits = torch.cat((pos_logits, neg_logits), dim=1)                                             # Shape (N, K+1)
         loss = F.cross_entropy(logits, labels)
         return loss
+
+
+class DINOLoss(nn.Module):
+
+    def __init__(self):
+        super(DINOLoss, self).__init__()
+
+    def forward(self, teacher_fvecs, student_fvecs, temp_s, temp_t, center):
+        # teacher_fvecs has size (bs, 2, K) with teacher_global features
+        # student_fvecs has size (bs, 2+V, K) with (student_global, student_local) features stacked
+        targets_1 = teacher_fvecs[:, 0, :].unsqueeze(1).repeat(1, student_fvecs.size(1), 1)             # (bs, 2+V, K) of first global view features 
+        targets_2 = teacher_fvecs[:, 1, :].unsqueeze(1).repeat(1, student_fvecs.size(1), 1)             # (bs, 2+V, K) of second global view features
+        targets_1 = F.softmax((targets_1 - center) / temp_t, -1)
+        targets_2 = F.softmax((targets_2 - center) / temp_t, -1)
+        loss_1 = -(targets_1 * F.log_softmax(student_fvecs / temp_s, -1)).sum(-1).mean()         
+        loss_2 = -(targets_2 * F.log_softmax(student_fvecs / temp_s, -1)).sum(-1).mean()
+        return loss_1 + loss_2

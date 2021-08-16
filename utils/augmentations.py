@@ -3,6 +3,7 @@ import torch
 import random
 import numpy as np
 from torchvision import transforms
+from torchvision.transforms.functional import InterpolationMode
 from PIL import Image, ImageFilter, ImageOps, ImageEnhance, ImageDraw
 
 
@@ -124,7 +125,6 @@ TRANSFORM_HELPER = {
     "cutout": Cutout,
 }
 
-
 def get_transform(config):
     """
     Generates a torchvision.transforms.Compose pipeline
@@ -142,3 +142,32 @@ def get_transform(config):
             tr = TRANSFORM_HELPER[key]()
         transform.append(tr)
     return transforms.Compose(transform)
+
+
+class MultiCrop:
+    def __init__(self, config):
+        self.num_local = config.get("num_local_views", 6)
+        self.num_global = config.get("num_global_views", 2)
+        self.scale = config.get("scale_threshold", 0.3)
+        self.global_crop = transforms.RandomResizedCrop(config["global_size"], scale=(self.scale, 1.0), interpolation=InterpolationMode.BICUBIC)
+        self.local_crop = transforms.RandomResizedCrop(config["local_size"], scale=(0.08, self.scale), interpolation=InterpolationMode.BICUBIC)
+        self.transforms = get_transform(config["train_transforms"])
+
+    def __call__(self, img):
+        global_1, global_2, local_1, local_2 = [], [], [], []
+        aug_1, aug_2 = self.transforms(img), self.transforms(img)
+
+        for _ in range(self.num_global):
+            crop_1, crop_2 = self.global_crop(aug_1), self.global_crop(aug_2)
+            global_1.append(crop_1), global_2.append(crop_2)
+        
+        for _ in range(self.num_local):
+            crop_1, crop_2 = self.local_crop(aug_1), self.local_crop(aug_2)
+            local_1.append(crop_1), local_2.append(crop_2)
+        
+        return {
+            "global_1": torch.stack(global_1, 0), 
+            "global_2": torch.stack(global_2, 0),
+            "local_1": torch.stack(local_1, 0),
+            "local_2": torch.stack(local_2, 0)
+        }

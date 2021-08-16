@@ -9,9 +9,14 @@ def get_optimizer(config, params):
     """
     name = config.get("name", "sgd")
     if name == "sgd":
-        return optim.SGD(params=params, lr=config["lr"], weight_decay=config["weight_decay"], momentum=0.9, nesterov=True)
+        return optim.SGD(
+            params=params, lr=config["lr"], weight_decay=config["weight_decay"], momentum=0.9, nesterov=True)
     elif name == "adam":
-        return optim.Adam(params=params, lr=config["lr"], weight_decay=config["weight_decay"])
+        return optim.Adam(
+            params=params, lr=config["lr"], weight_decay=config["weight_decay"], eps=config.get("epsilon", 1e-06), amsgrad=config.get("amsgrad", False))
+    elif name == "adamw":
+        return optim.AdamW(
+            params=params, lr=config["lr"], weight_decay=config["weight_decay"], eps=config.get("epsilon", 1e-06), amsgrad=config.get("amsgrad", False))
     else:
         raise NotImplementedError(f"Invalid optimizer {name}") 
 
@@ -23,8 +28,9 @@ def get_scheduler(config, optimizer):
     warmup_epochs = config.get("warmup_epochs", 0)
 
     if warmup_epochs > 0:
+        max_lr = optimizer.param_groups[0]["lr"]
         for group in optimizer.param_groups:
-            group["lr"] = 1e-12
+            group["lr"] = 1e-12 + max_lr / warmup_epochs 
 
     if name is not None:
         if name == "cosine":

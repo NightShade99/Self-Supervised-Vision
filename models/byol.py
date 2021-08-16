@@ -112,7 +112,8 @@ class BootstrapYourOwnLatent:
             pass
 
     def update_tau(self, step):
-        self.tau = 1.0 - (1.0 - self.tau) * (math.cos(math.pi * step / self.max_steps) + 1) / 2
+        tau_upper, tau_lower = self.config.get("tau_upper", 1.0), self.config.get("tau_lower", 0.996)
+        self.tau = tau_upper - (tau_upper - tau_lower) * (math.cos(math.pi * step / self.max_steps) + 1) / 2
 
     @torch.no_grad()
     def momentum_update(self):
@@ -123,8 +124,8 @@ class BootstrapYourOwnLatent:
         img_1, img_2 = batch["aug_1"].to(self.device), batch["aug_2"].to(self.device)
         online_1, target_1 = self.online_network(img_1), self.target_network(img_2)
         online_2, target_2 = self.online_network(img_2), self.target_network(img_2)
-        online, target = torch.cat((online_1, online_2), dim=0), torch.cat((target_1, target_2), dim=0)
-        loss = self.loss_fn(online, target)
+        loss_1, loss_2 = self.loss_fn(online_1, target_2), self.loss_fn(online_2, target_1)
+        loss = loss_1 + loss_2
 
         self.optim.zero_grad()
         loss.backward()
@@ -189,7 +190,7 @@ class BootstrapYourOwnLatent:
                 train_meter.add(train_metrics)
                 common.progress_bar(progress=(step+1)/len(self.train_loader), desc=desc_str, status=train_meter.return_msg())
             print()
-            self.logger.write("[TRAIN] Epoch {:4d}/{:4d} ".format(epoch, self.config["epochs"]) + train_meter.return_msg(), mode="train")
+            self.logger.write("Epoch {:4d}/{:4d} ".format(epoch, self.config["epochs"]) + train_meter.return_msg(), mode="train")
             self.adjust_learning_rate(epoch)
 
             if epoch % self.config["eval_every"] == 0:
