@@ -60,6 +60,7 @@ class EncoderModel(nn.Module):
         for x1, x2 in w_offsets:
             for y1, y2 in h_offsets:
                 patch_features.append(self.g_proj_head_initial(self.encoder(imgs[:, :, y1:y2, x1:x2])))               
+        patch_features = [patch_features[i] for i in torch.randperm(len(patch_features))]
         patch_features = torch.cat(patch_features, 1)
         patch_features = self.g_proj_head_final(patch_features)
         image_features = self.f_proj_head(self.encoder(imgs))
