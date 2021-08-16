@@ -107,10 +107,9 @@ class PirlLoss(nn.Module):
         bs = img_features.size(0)
         mask = torch.zeros(bs, bs).fill_diagonal_(1).bool().to(img_features.device)
 
-        pos_logits = torch.mm(v_img, v_patch.t()) / self.temp                                       
-        neg_logits = torch.mm(v_patch, memory_vectors.t()) / self.temp
-        pos_logits = pos_logits[mask].view(bs, 1)                                               # (bs, 1)
-        neg_logits = neg_logits[torch.logical_not(mask)].view(bs, -1)                           # (bs, bs-1)
-        logits = torch.cat((pos_logits, neg_logits), 1)                                         # (bs, bs)
-        labels = torch.ones(bs).long().to(img_features.device)
-        return F.cross_entropy(logits, labels)
+        pos_logits = (torch.mm(v_img, v_patch.t()) / self.temp)[mask].view(bs, 1)               # (bs, 1)                                       
+        neg_logits = (torch.mm(v_patch, memory_vectors.t()) / self.temp).view(bs, -1)           # (bs, num_negatives)
+        logits = torch.cat((pos_logits, neg_logits), 1)                                         # (bs, num_negatives+1)
+        labels = torch.zeros(bs).long().to(img_features.device)
+        loss = F.cross_entropy(logits, labels)
+        return loss

@@ -7,6 +7,7 @@ momentum: 0.5
 proj_dim: 128
 patch_size: 8
 num_patches: 16
+num_negatives: 32000
 
 data:
   dataset_name: cifar10

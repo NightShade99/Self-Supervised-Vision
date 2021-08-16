@@ -21,19 +21,22 @@ NETWORKS = {
 
 class MemoryBank:
 
-    def __init__(self, data_size, feature_size, momentum=0.5):
+    def __init__(self, data_size, feature_size, momentum=0.5, num_negatives=32000):
         self.bank = torch.FloatTensor(data_size, feature_size).zero_()
         self.bank = F.normalize(self.bank, dim=-1, p=2)
+        self.num_negatives = num_negatives
+        self.data_size = data_size
         self.size = data_size
         self.m = momentum
         self.ptr = 0 
         
     def update_vectors(self, indices, new_vectors):
         new_vectors = F.normalize(new_vectors, p=2, dim=-1)
-        self.bank[indices] = self.m * self.bank[indices] + (1 - self.m) * new_vectors
+        self.bank[indices] = self.m * self.bank[indices] + (1 - self.m) * new_vectors.detach().cpu()
 
-    def get_vectors(self, indices):
-        return self.bank[indices]
+    def get_vectors(self, exclude_idx):
+        indices = torch.tensor([i for i in torch.randperm(self.data_size) if i not in exclude_idx]).long()
+        return self.bank[indices[:self.num_negatives]]
 
 
 class EncoderModel(nn.Module):
@@ -77,7 +80,7 @@ class PretextInvariantRepresentationModel:
         encoder, encoder_dim = NETWORKS[args["arch"]].values()
         self.model = EncoderModel(
             encoder(**self.config["encoder"]), encoder_dim, self.config["proj_dim"], self.config["patch_size"], self.config["num_patches"]).to(self.device)
-        self.memory_bank = MemoryBank(len(self.train_loader.dataset), self.config["proj_dim"], self.config["momentum"])
+        self.memory_bank = MemoryBank(len(self.train_loader.dataset), self.config["proj_dim"], self.config["momentum"], self.config["num_negatives"])
 
         self.optim = train_utils.get_optimizer(self.config["optimizer"], params=self.model.parameters())
         self.scheduler, self.warmup_epochs = train_utils.get_scheduler({**self.config["scheduler"], "epochs": self.config["epochs"]}, optimizer=self.optim)
