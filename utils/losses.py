@@ -49,7 +49,7 @@ class SimclrLoss(nn.Module):
 class MocoLoss(nn.Module):
 
     def __init__(self, normalize=True, temperature=1.0):
-        super(InfoNCELoss, self).__init__()
+        super(MocoLoss, self).__init__()
         self.normalize = normalize 
         self.temperature = temperature
 
@@ -75,7 +75,7 @@ class MocoLoss(nn.Module):
 class DinoLoss(nn.Module):
 
     def __init__(self):
-        super(DINOLoss, self).__init__()
+        super(DinoLoss, self).__init__()
 
     def forward(self, teacher_fvecs, student_fvecs, temp_s, temp_t, center):
         # teacher_fvecs has size (bs, 2, K) with teacher_global features
@@ -91,12 +91,13 @@ class DinoLoss(nn.Module):
 
 class PirlLoss(nn.Module):
 
-    def __init__(self, normalize=True, temperature=1.0):
+    def __init__(self, normalize=True, temperature=1.0, loss_weight=0.5):
         super(PirlLoss, self).__init__()
+        self.loss_weight = loss_weight
         self.normalize = normalize 
         self.temp = temperature
 
-    def forward(self, img_features, patch_features, memory_vectors):
+    def forward(self, img_features, patch_features, memory_pos_features, memory_neg_features):
         if self.normalize:
             v_img = F.normalize(img_features, p=2, dim=-1)
             v_patch = F.normalize(patch_features, p=2, dim=-1)
@@ -107,9 +108,35 @@ class PirlLoss(nn.Module):
         bs = img_features.size(0)
         mask = torch.zeros(bs, bs).fill_diagonal_(1).bool().to(img_features.device)
 
-        pos_logits = (torch.mm(v_img, v_patch.t()) / self.temp)[mask].view(bs, 1)               # (bs, 1)                                       
-        neg_logits = (torch.mm(v_patch, memory_vectors.t()) / self.temp).view(bs, -1)           # (bs, num_negatives)
-        logits = torch.cat((pos_logits, neg_logits), 1)                                         # (bs, num_negatives+1)
+        pos_logits_1 = (torch.mm(memory_pos_features, v_patch.t()) / self.temp)[mask].view(bs, 1)                       # (bs, 1)
+        pos_logits_2 = (torch.mm(memory_pos_features, v_img.t()) / self.temp)[mask].view(bs, 1)                         # (bs, 1)                                    
+        neg_logits = (torch.mm(memory_pos_features, memory_neg_features.t()) / self.temp).view(bs, -1)                  # (bs, K)
+        logits_1, logits_2 = torch.cat((pos_logits_1, neg_logits), 1), torch.cat((pos_logits_2, neg_logits), 1)         # (bs, K+1)
         labels = torch.zeros(bs).long().to(img_features.device)
-        loss = F.cross_entropy(logits, labels)
-        return loss
+        loss_1, loss_2 = F.cross_entropy(logits_1, labels), F.cross_entropy(logits_2, labels)
+        return self.loss_weight * loss_1 + (1.0 - self.loss_weight) * loss_2
+        
+
+class BarlowLoss(nn.Module):
+
+    def __init__(self, normalize=True, off_diagonal_weight=0.005):
+        super(BarlowLoss, self).__init__()
+        self.normalize = normalize
+        self.lmbda = off_diagonal_weight
+
+    def forward(self, z_i, z_j):
+        if self.normalize:
+            zi_norm = F.normalize(z_i, p=2, dim=-1)
+            zj_norm = F.normalize(z_j, p=2, dim=-1)
+        else:
+            zi_norm = z_i
+            zj_norm = z_j
+        
+        bs, fsize = zi_norm.size()
+        zi_norm = (zi_norm - zi_norm.mean(0)) / zi_norm.std(0)
+        zj_norm = (zj_norm - zj_norm.mean(0)) / zj_norm.std(0)
+        corr_mat = torch.mm(zi_norm.t(), zj_norm) / bs
+        loss = F.mse_loss(corr_mat, torch.eye(fsize).to(zi_norm.device), reduction="none")
+        off_diag_factor = (torch.ones(fsize, fsize) * self.lmbda).fill_diagonal_(1.0).to(zi_norm.device)
+        loss = loss * off_diag_factor
+        return loss.sum()

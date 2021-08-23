@@ -4,7 +4,7 @@ import argparse
 import numpy as np
 from datetime import datetime as dt 
 from models import (
-    simclr, moco, byol, dino, pirl
+    simclr, moco, byol, dino, pirl, barlow
 )
 
 TASKS = ["train", "linear_eval", "get_features"]
@@ -14,7 +14,8 @@ ALGORITHMS = {
     "moco": moco.MomentumContrast,
     "byol": byol.BootstrapYourOwnLatent,
     "dino": dino.DistillationWithNoLabels,
-    "pirl": pirl.PretextInvariantRepresentationModel
+    "pirl": pirl.PretextInvariantRepresentationModel,
+    "barlow": barlow.BarlowTwins
 }
 
 def _check_checkpoint_specified(args):

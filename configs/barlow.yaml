@@ -1,18 +1,14 @@
 
-# Configuration file for PIRL training
+# Configuration file for SimCLR training
 
 epochs: 1000
-eval_every: 5
-momentum: 0.5
-proj_dim: 128
-patch_size: 16
-num_patches: 4
-num_negatives: 1000
+eval_every: 10
+proj_dim: 4096
 
 data:
   dataset_name: cifar10
   root: data/cifar10
-  batch_size: 256
+  batch_size: 512
   transforms:
     train:
       color_jitter:
@@ -25,7 +21,7 @@ data:
         p: 0.2
       random_resized_crop:
         size: [32, 32]
-        scale: [0.6, 1.0]
+        scale: [0.2, 1.0]
       random_flip:
       to_tensor:
       normalize:
@@ -44,19 +40,18 @@ encoder:
   
 optimizer:
   name: sgd
-  lr: 0.01
+  lr: 0.2
   momentum: 0.9
   nesterov: True
-  weight_decay: 1.0e-04
+  weight_decay: 1.5e-06
   
 scheduler:
   name: cosine
-  warmup_epochs: 0
+  warmup_epochs: 10
 
 loss_fn:
-  normalize: True
-  temperature: 0.07
-  loss_weight: 0.5
+  normalize: False
+  off_diagonal_weight: 0.005
 
 linear_eval:
   epochs: 100

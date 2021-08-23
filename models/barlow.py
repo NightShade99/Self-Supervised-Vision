@@ -19,69 +19,28 @@ NETWORKS = {
     "wide_resnet101": {"net": resnet.wide_resnet101_2, "dim": 2048}
 }
 
-class MemoryBank:
 
-    def __init__(self, data_size, feature_size, momentum=0.5, num_negatives=1000):
-        self.bank = torch.FloatTensor(data_size, feature_size).zero_()
-        self.bank = F.normalize(self.bank, dim=-1, p=2)
-        self.num_negatives = num_negatives
-        self.data_size = data_size
-        self.size = data_size
-        self.m = momentum
-        self.ptr = 0 
+class ProjectionHead(nn.Module):
 
-    def initialize_vectors(self, indices, vectors):
-        vectors = F.normalize(vectors, p=2, dim=-1)
-        self.bank[indices] = vectors
-        
-    def update_vectors(self, indices, new_vectors):
-        new_vectors = F.normalize(new_vectors, p=2, dim=-1)
-        self.bank[indices] = self.m * self.bank[indices] + (1 - self.m) * new_vectors.detach().cpu()
+    def __init__(self, input_dim, projection_dim):
+        super(ProjectionHead, self).__init__()
+        self.layer1 = nn.Sequential(nn.Linear(input_dim, projection_dim), nn.BatchNorm1d(projection_dim), nn.ReLU())
+        self.layer2 = nn.Sequential(nn.Linear(projection_dim, projection_dim), nn.BatchNorm1d(projection_dim), nn.ReLU())
+        self.layer3 = nn.Linear(projection_dim, projection_dim)
 
-    def get_positives(self, indices):
-        return self.bank[indices]
-
-    def get_negatives(self, exclude_idx):
-        indices = torch.tensor([i for i in torch.randperm(self.data_size) if i not in exclude_idx]).long()
-        return self.bank[indices[:self.num_negatives]]
+    def __call__(self, x):
+        x = self.layer1(x)
+        x = self.layer2(x)
+        x = self.layer3(x)
+        x = F.normalize(x, p=2, dim=-1)
+        return x
 
 
-class EncoderModel(nn.Module):
-    
-    def __init__(self, encoder, encoder_dim, projection_dim, patch_size, num_patches):
-        super(EncoderModel, self).__init__()
-        self.encoder = encoder 
-        self.patch_size = patch_size
-        self.f_proj_head = nn.Linear(encoder_dim, projection_dim)
-        self.g_proj_head_initial = nn.Linear(encoder_dim, projection_dim)
-        self.g_proj_head_final = nn.Linear(projection_dim * num_patches, projection_dim)
-
-    def forward(self, normal_imgs, patching_imgs=None):
-        # Patchwise feature extraction and random concatenation
-        # for Jigsaw task is performed in this module
-        # imgs is non-transformed image tensor of shape (bs, c, h, w)
-        image_features = self.f_proj_head(self.encoder(normal_imgs))
-        if patching_imgs is not None:
-            patch_features = []
-            bs, c, h, w = patching_imgs.size()
-            w_offsets = [(i*self.patch_size, (i+1)*self.patch_size) for i in range(w // self.patch_size)]
-            h_offsets = [(i*self.patch_size, (i+1)*self.patch_size) for i in range(h // self.patch_size)]
-            for x1, x2 in w_offsets:
-                for y1, y2 in h_offsets:
-                    patch_features.append(self.g_proj_head_initial(self.encoder(patching_imgs[:, :, y1:y2, x1:x2])))               
-            patch_features = [patch_features[i] for i in torch.randperm(len(patch_features))]
-            patch_features = torch.cat(patch_features, 1)
-            patch_features = self.g_proj_head_final(patch_features)
-            return image_features, patch_features
-        else:
-            return image_features 
-
-
-class PretextInvariantRepresentationModel:
+class BarlowTwins:
 
     def __init__(self, args):
         assert args["arch"] in NETWORKS.keys(), f"Expected 'arch' to be one of {list(NETWORKS.keys())}"
-        output_root = os.path.join("outputs/pirl", args["arch"])
+        output_root = os.path.join("outputs/barlow", args["arch"])
         
         self.config, self.output_dir, self.logger, self.device = common.initialize_experiment(args, output_root)
         self.train_loader, self.test_loader = data_utils.get_double_augment_dataloaders(**self.config["data"])
@@ -89,30 +48,28 @@ class PretextInvariantRepresentationModel:
         self.logger.write("Wandb url: {}".format(run.get_url()), mode="info")
 
         encoder, encoder_dim = NETWORKS[args["arch"]].values()
-        self.model = EncoderModel(
-            encoder(**self.config["encoder"]), encoder_dim, self.config["proj_dim"], self.config["patch_size"], self.config["num_patches"]).to(self.device)
-        self.memory_bank = MemoryBank(len(self.train_loader.dataset), self.config["proj_dim"], self.config["momentum"], self.config["num_negatives"])
-        self.initialize_memory_vectors()
-
-        self.optim = train_utils.get_optimizer(self.config["optimizer"], params=self.model.parameters())
+        self.encoder = encoder(**self.config["encoder"]).to(self.device)
+        self.proj_head = ProjectionHead(encoder_dim, self.config["proj_dim"]).to(self.device)
+        self.optim = train_utils.get_optimizer(self.config["optimizer"], params=list(self.encoder.parameters())+list(self.proj_head.parameters()))
         self.scheduler, self.warmup_epochs = train_utils.get_scheduler({**self.config["scheduler"], "epochs": self.config["epochs"]}, optimizer=self.optim)
         if self.warmup_epochs > 0:
             self.warmup_rate = (self.config["optimizer"]["lr"] - 1e-12) / self.warmup_epochs
 
-        self.loss_fn = losses.PirlLoss(**self.config["loss_fn"])
+        self.loss_fn = losses.BarlowLoss(**self.config["loss_fn"])
         self.best_metric = 0
         
         if args["load"] is not None:
             self.load_checkpoint(args["load"])
 
     def save_checkpoint(self):
-        state = {"encoder": self.model.state_dict()}
+        state = {"encoder": self.encoder.state_dict(), "proj_head": self.proj_head.state_dict()}
         torch.save(state, os.path.join(self.output_dir, "best_model.pt"))
 
     def load_checkpoint(self, ckpt_dir):
         if os.path.exists(os.path.join(ckpt_dir, "encoder")):
             state = torch.load(os.path.join(ckpt_dir, "best_model.pt"), map_location=self.device)
-            self.model.load_state_dict(state["encoder"])
+            self.encoder.load_state_dict(state["encoder"])
+            self.proj_head.load_state_dict(state["proj_head"])
             self.logger.print(f"Successfully loaded model from {ckpt_dir}")
         else:
             raise NotImplementedError(f"Could not find saved checkpoint at {ckpt_dir}")
@@ -127,12 +84,10 @@ class PretextInvariantRepresentationModel:
             pass
 
     def train_step(self, batch):
-        indices, normal_imgs, patching_imgs = batch["index"], batch["aug_1"].to(self.device), batch["aug_2"].to(self.device)
-        memory_pos_features = self.memory_bank.get_positives(indices).to(self.device)
-        memory_neg_features = self.memory_bank.get_negatives(indices).to(self.device)
-        img_features, patch_features = self.model(normal_imgs, patching_imgs)
-        loss = self.loss_fn(img_features, patch_features, memory_pos_features, memory_neg_features)
-        self.memory_bank.update_vectors(indices, img_features)
+        img_1, img_2 = batch["aug_1"].to(self.device), batch["aug_2"].to(self.device)
+        z_1 = self.proj_head(self.encoder(img_1))
+        z_2 = self.proj_head(self.encoder(img_2))
+        loss = self.loss_fn(z_1, z_2)
 
         self.optim.zero_grad()
         loss.backward()
@@ -152,7 +107,7 @@ class PretextInvariantRepresentationModel:
         if split == "train":
             for step, batch in enumerate(self.train_loader):
                 img, trg = batch["img"].to(self.device), batch["label"].detach().cpu().numpy()
-                z = self.model(img)
+                z = self.proj_head(self.encoder(img))
                 z = F.normalize(z, dim=-1, p=2).detach().cpu().numpy()
                 fvecs.append(z), gt.append(trg)
                 common.progress_bar(progress=(step+1)/len(self.train_loader), desc="Building train features")
@@ -161,7 +116,7 @@ class PretextInvariantRepresentationModel:
         elif split == "test":
             for step, batch in enumerate(self.test_loader):
                 img, trg = batch["img"].to(self.device), batch["label"].detach().cpu().numpy()
-                z = self.model(img)
+                z = self.proj_head(self.encoder(img))
                 z = F.normalize(z, dim=-1, p=2).detach().cpu().numpy()
                 fvecs.append(z), gt.append(trg)
                 common.progress_bar(progress=(step+1)/len(self.test_loader), desc="Building test features")
@@ -183,17 +138,6 @@ class PretextInvariantRepresentationModel:
             device = self.device
         )
         self.logger.write("Test linear eval accuracy: {:.4f}".format(test_linear_acc), mode="info")
-
-    @torch.no_grad()
-    def initialize_memory_vectors(self):
-        print()
-        self.logger.print("Initializing memory bank", mode="info")
-        for step, batch in enumerate(self.train_loader):
-            indices, imgs = batch["index"], batch["img"].to(self.device)
-            vectors = self.model(imgs).detach().cpu()
-            self.memory_bank.initialize_vectors(indices, vectors)
-            common.progress_bar(progress=(step+1)/len(self.train_loader), desc="Initializing memory", status="")
-        print()
 
     def train(self):
         self.logger.print("Beginning training.", mode="info")
@@ -220,4 +164,4 @@ class PretextInvariantRepresentationModel:
                     self.save_checkpoint()
         print()
         self.logger.print("Completed training. Beginning linear evaluation.", mode="info")
-        self.perform_linear_eval()  
+        self.perform_linear_eval()        

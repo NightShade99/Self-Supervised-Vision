@@ -122,7 +122,7 @@ class BootstrapYourOwnLatent:
 
     def train_step(self, batch):
         img_1, img_2 = batch["aug_1"].to(self.device), batch["aug_2"].to(self.device)
-        online_1, target_1 = self.online_network(img_1), self.target_network(img_2)
+        online_1, target_1 = self.online_network(img_1), self.target_network(img_1)
         online_2, target_2 = self.online_network(img_2), self.target_network(img_2)
         loss_1, loss_2 = self.loss_fn(online_1, target_2), self.loss_fn(online_2, target_1)
         loss = loss_1 + loss_2
@@ -145,8 +145,7 @@ class BootstrapYourOwnLatent:
         if split == "train":
             for step, batch in enumerate(self.train_loader):
                 img, trg = batch["img"].to(self.device), batch["label"].detach().cpu().numpy()
-                z = self.online_network(img)
-                z = F.normalize(z, dim=-1, p=2).detach().cpu().numpy()
+                z = self.online_network(img).detach().cpu().numpy()
                 fvecs.append(z), gt.append(trg)
                 common.progress_bar(progress=(step+1)/len(self.train_loader), desc="Building train features")
             print()
@@ -154,8 +153,7 @@ class BootstrapYourOwnLatent:
         elif split == "test":
             for step, batch in enumerate(self.test_loader):
                 img, trg = batch["img"].to(self.device), batch["label"].detach().cpu().numpy()
-                z = self.online_network(img)
-                z = F.normalize(z, dim=-1, p=2).detach().cpu().numpy()
+                z = self.online_network(img).detach().cpu().numpy()
                 fvecs.append(z), gt.append(trg)
                 common.progress_bar(progress=(step+1)/len(self.test_loader), desc="Building test features")
             print()
@@ -185,10 +183,11 @@ class BootstrapYourOwnLatent:
 
             for step, batch in enumerate(self.train_loader):
                 train_metrics = self.train_step(batch)
-                self.update_tau(step)
                 wandb.log({"Train loss": train_metrics["loss"]})
                 train_meter.add(train_metrics)
                 common.progress_bar(progress=(step+1)/len(self.train_loader), desc=desc_str, status=train_meter.return_msg())
+                self.update_tau(step)
+                self.momentum_update()
             print()
             self.logger.write("Epoch {:4d}/{:4d} ".format(epoch, self.config["epochs"]) + train_meter.return_msg(), mode="train")
             self.adjust_learning_rate(epoch)

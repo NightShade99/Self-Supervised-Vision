@@ -30,23 +30,6 @@ class FeaturesDataset:
         label = self.labels[idx]
         return {"features": fvec, "label": label}
 
-    
-class IndexedDataset(Dataset):
-
-    def __init__(self, dataset, transforms):
-        super(IndexedDataset, self).__init__()
-        self.dataset = dataset 
-        self.transform = get_transform(transforms["standard"])
-        self.return_items = ["img", "label"]
-    
-    def __len__(self):
-        return len(self.dataset)
-
-    def __getitem__(self, idx):
-        orig_img, label = self.dataset[idx]
-        img = self.transform(orig_img)
-        return {"index": idx, "img": img, "label": label}
-
 
 class DoubleAugmentedDataset(Dataset):
 
@@ -65,7 +48,7 @@ class DoubleAugmentedDataset(Dataset):
         img = self.test_transform(orig_img)
         aug1 = self.train_transform(orig_img)
         aug2 = self.train_transform(orig_img)
-        return {"img": img, "aug_1": aug1, "aug_2": aug2, "label": label}
+        return {"index": idx, "img": img, "aug_1": aug1, "aug_2": aug2, "label": label}
 
 
 class MultiCropDataset(Dataset):
@@ -114,16 +97,6 @@ def get_multicrop_dataloaders(dataset_name, root, multicrop_config, batch_size):
     test_dset = DATASETS[dataset_name](root=root, train=False, transform=None, download=True)
     train_dset = MultiCropDataset(dataset=train_dset, multicrop_config=multicrop_config)
     test_dset = MultiCropDataset(dataset=test_dset, multicrop_config=multicrop_config)
-    train_loader = DataLoader(train_dset, batch_size=batch_size, shuffle=True, num_workers=4)
-    test_loader = DataLoader(test_dset, batch_size=batch_size, shuffle=False, num_workers=4)
-    return train_loader, test_loader
-    
-def get_indexed_dataloaders(dataset_name, root, transforms, batch_size):
-    assert dataset_name in DATASETS.keys(), f"Unrecognized dataset {dataset_name}, expected one of {list(DATASETS.keys())}"
-    train_dset = DATASETS[dataset_name](root=root, train=True, transform=None, download=True)
-    test_dset = DATASETS[dataset_name](root=root, train=False, transform=None, download=True)
-    train_dset = IndexedDataset(train_dset, transforms)
-    test_dset = IndexedDataset(test_dset, transforms)
     train_loader = DataLoader(train_dset, batch_size=batch_size, shuffle=True, num_workers=4)
     test_loader = DataLoader(test_dset, batch_size=batch_size, shuffle=False, num_workers=4)
     return train_loader, test_loader
