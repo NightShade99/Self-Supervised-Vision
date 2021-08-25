@@ -37,7 +37,6 @@ if __name__ == "__main__":
     ap.add_argument("-t", "--task", required=True, type=str, choices=TASKS, help="Task to perform for chosen algorithm")
     ap.add_argument("-o", "--output", default=dt.now().strftime("%d-%m-%Y_%H-%M"), type=str, help="Path to output directory")
     ap.add_argument("-l", "--load", default=None, type=str, help="Path to directory containing trained checkpoints to be loaded")
-    ap.add_argument("-r", "--resume", default=None, type=str, help="Path to directory containing saved state from which to resume training")
     args = vars(ap.parse_args())
 
     # Initialize model based on algorithm

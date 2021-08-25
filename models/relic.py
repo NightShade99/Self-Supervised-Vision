@@ -63,7 +63,7 @@ class InvariantCausalRepresentationLearning:
 
     def __init__(self, args):
         assert args["arch"] in NETWORKS.keys(), f"Expected 'arch' to be one of {list(NETWORKS.keys())}"
-        output_root = os.path.join("outputs/byol", args["arch"])
+        output_root = os.path.join("outputs/relic", args["arch"])
         
         self.config, self.output_dir, self.logger, self.device = common.initialize_experiment(args, output_root)
         self.train_loader, self.test_loader = data_utils.get_double_augment_dataloaders(**self.config["data"])
@@ -90,34 +90,6 @@ class InvariantCausalRepresentationLearning:
         
         if args["load"] is not None:
             self.load_checkpoint(args["load"])
-
-        if args["resume"] is not None:
-            self.load_state(args["resume"])
-
-    def save_state(self, epoch):
-        state = {
-            "epoch": epoch+1,
-            "online": self.online_network.state_dict(),
-            "target": self.target_network.state_dict(),
-            "optim": self.optim.state_dict(),
-            "scheduler": self.scheduler.state_dict() if self.scheduler is not None else None
-        }
-        torch.save(state, os.path.join(self.output_dir, "last_state.pt"))
-
-    def load_state(self, model_dir):
-        location = os.path.join(model_dir, "last_state.pt")
-        if os.path.exists(location):
-            state = torch.load(location, map_location=self.device)
-            self.online_network.load_state_dict(state["online"])
-            self.target_network.load_state_dict(state["target"])
-            self.optim.load_state_dict(state["optim"])
-            if self.scheduler is not None:
-                self.scheduler.load_state_dict(state["scheduler"])
-            self.start_epoch = state["epoch"]
-            self.output_dir = model_dir 
-            self.logger.print("Successfully load saved state", mode="info")
-        else:
-            raise ValueError(f"Could not find last_state.pt at {model_dir}")
 
     def save_checkpoint(self):
         state = {"encoder": self.online_network.state_dict()}

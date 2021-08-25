@@ -13,11 +13,11 @@ Tentatively, the algorithms checked in the table below will be implemented. Stat
 | ClusterFit: Improving Generalization of Visual Representations                |  ClusterFit |   [arXiv](https://arxiv.org/abs/1912.03330)   |        |              |             | 
 | Unsupervised Learning of Visual Features by Contrasting Cluster Assignments   |     SwAV    |   [arXiv](https://arxiv.org/abs/2006.09882)   |        |              |             | 
 | Self-Supervised Pretraining of Visual Features in the Wild                    |     SEER    |   [arXiv](https://arxiv.org/abs/2103.01988)   |        |              |             | 
-| Unsupervised Feature Learning by Non-Parametric Instance Level Discrimination |   InstDisc  |   [arXiv](https://arxiv.org/abs/1805.01978)   |        |              |             | 
+| Self-labelling via simultaneous clustering and representation learning        |     SeLa    |   [arXiv](https://arxiv.org/abs/1911.05371)   |        |              |             | 
 | Momentum Contrast for Unsupervised Visual Representation Learning             |     MoCo    |   [arXiv](https://arxiv.org/abs/1911.05722)   |  `C`   |    63.14     |             | 
 | A Simple Framework for Contrastive Learning of Visual Representations         |    SimCLR   |   [arXiv](https://arxiv.org/abs/2002.05709)   |  `C`   |    77.79     |             | 
 | Bootstrap Your Own Latent: A new approach to self-supervised Learning         |     BYOL    |   [arXiv](https://arxiv.org/abs/2006.07733)   |  `C`   |    80.09     |             | 
-| Representation Learning via Invariant Causal Mechanisms                       |    ReLIC    |   [arXiv](https://arxiv.org/abs/2010.07922)   |        |              |             | 
-| Exploring Simple Siamese Representation Learning                              |   SimSiam   |   [arXiv](https://arxiv.org/abs/2011.10566)   |        |              |             | 
+| Representation Learning via Invariant Causal Mechanisms                       |    ReLIC    |   [arXiv](https://arxiv.org/abs/2010.07922)   |  `C`   |    79.26     |             | 
+| Exploring Simple Siamese Representation Learning                              |   SimSiam   |   [arXiv](https://arxiv.org/abs/2011.10566)   |  `I`   |              |             | 
 | Emerging Properties in Self-Supervised Vision Transformers                    |     DINO    |   [arXiv](https://arxiv.org/abs/2104.14294)   |  `I`   |              |             | 
 | Barlow Twins: Self-Supervised Learning via Redundancy Reduction               |    Barlow   |   [arXiv](https://arxiv.org/abs/2103.03230)   |  `C`   |    56.81     |             | 
