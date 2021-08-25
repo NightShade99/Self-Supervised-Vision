@@ -4,18 +4,21 @@ import argparse
 import numpy as np
 from datetime import datetime as dt 
 from models import (
-    simclr, moco, byol, dino, pirl, barlow
+    simclr, moco, byol, dino, pirl, barlow, simsiam, relic
 )
 
 TASKS = ["train", "linear_eval", "get_features"]
 NETWORKS = ["resnet18", "resnet50", "resnext50", "resnext101", "wide_resnet50", "wide_resnet101", "vit"]
+
 ALGORITHMS = {
     "simclr": simclr.SimCLR,
     "moco": moco.MomentumContrast,
     "byol": byol.BootstrapYourOwnLatent,
     "dino": dino.DistillationWithNoLabels,
     "pirl": pirl.PretextInvariantRepresentationModel,
-    "barlow": barlow.BarlowTwins
+    "barlow": barlow.BarlowTwins,
+    "simsiam": simsiam.SimpleSiameseNetworks,
+    "relic": relic.InvariantCausalRepresentationLearning
 }
 
 def _check_checkpoint_specified(args):
