@@ -4,7 +4,8 @@ import argparse
 import numpy as np
 from datetime import datetime as dt 
 from models import (
-    simclr, moco, byol, dino, pirl, barlow, simsiam, relic
+    simclr, moco, byol, dino, pirl, barlow, simsiam, relic,
+    deep_cluster
 )
 
 TASKS = ["train", "linear_eval", "get_features"]
@@ -18,7 +19,8 @@ ALGORITHMS = {
     "pirl": pirl.PretextInvariantRepresentationModel,
     "barlow": barlow.BarlowTwins,
     "simsiam": simsiam.SimpleSiameseNetworks,
-    "relic": relic.InvariantCausalRepresentationLearning
+    "relic": relic.InvariantCausalRepresentationLearning,
+    "deep_cluster": deep_cluster.DeepCluster
 }
 
 def _check_checkpoint_specified(args):

@@ -1,10 +1,9 @@
 
-# Configuration file for MoCo training
+# Configuration file for SimCLR training
 
 epochs: 1000
 eval_every: 10
-proj_dim: 1024
-bottleneck_dim: 128
+num_classes: 10
 
 data:
   dataset_name: cifar10
@@ -12,18 +11,8 @@ data:
   batch_size: 512
   transforms:
     train:
-      color_jitter:
-        brightness: 0.4
-        contrast: 0.4
-        saturation: 0.4
-        hue: 0.1
-        apply_prob: 0.8
-      random_gray:
-        p: 0.2
-      random_resized_crop:
+      center_crop:
         size: [32, 32]
-        scale: [0.2, 1.0]
-      random_flip:
       to_tensor:
       normalize:
         mean: [0.4914, 0.4822, 0.4465]
@@ -41,18 +30,22 @@ encoder:
   
 optimizer:
   name: sgd
-  lr: 0.05
+  lr: 2.0
   momentum: 0.9
   nesterov: True
   weight_decay: 1.0e-04
   
 scheduler:
   name: cosine
-  warmup_epochs: 0
+  warmup_epochs: 10
+
+loss_fn:
+  normalize: True
+  temperature: 0.5
 
 linear_eval:
   epochs: 100
-  input_dim: 512
+  input_dim: 128
   batch_size: 256
   lr: 0.1
 

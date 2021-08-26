@@ -8,9 +8,7 @@ Tentatively, the algorithms checked in the table below will be implemented. Stat
 |:-----------------------------------------------------------------------------:|:-----------:|:---------------------------------------------:|:------:|:------------:|:-----------:|
 | Self-Supervised Learning of Pretext-Invariant Representations                 |     PIRL    |   [arXiv](https://arxiv.org/abs/1912.01991)   |  `I`   |              |             |
 | Learning Representations by Maximizing Mutual Information across Views        |    AMDIM    |   [arXiv](https://arxiv.org/abs/1906.00910)   |        |              |             | 
-| Representation Learning with Contrastive Predictive Coding                    |     CPC     |   [arXiv](https://arxiv.org/abs/1807.03748)   |        |              |             | 
-| Deep Clustering for Unsupervised Learning of Visual Features                  | DeepCluster |   [arXiv](https://arxiv.org/abs/1807.05520)   |        |              |             | 
-| ClusterFit: Improving Generalization of Visual Representations                |  ClusterFit |   [arXiv](https://arxiv.org/abs/1912.03330)   |        |              |             | 
+| Representation Learning with Contrastive Predictive Coding                    |     CPC     |   [arXiv](https://arxiv.org/abs/1807.03748)   |        |              |             |  
 | Unsupervised Learning of Visual Features by Contrasting Cluster Assignments   |     SwAV    |   [arXiv](https://arxiv.org/abs/2006.09882)   |        |              |             | 
 | Self-Supervised Pretraining of Visual Features in the Wild                    |     SEER    |   [arXiv](https://arxiv.org/abs/2103.01988)   |        |              |             | 
 | Self-labelling via simultaneous clustering and representation learning        |     SeLa    |   [arXiv](https://arxiv.org/abs/1911.05371)   |        |              |             | 

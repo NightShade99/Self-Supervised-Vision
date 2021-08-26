@@ -15,9 +15,10 @@ DATASETS = {
 # DATASET CLASSES
 # ================================================================================
 
-class FeaturesDataset:
+class FeaturesDataset(Dataset):
 
     def __init__(self, features, labels):
+        super(FeaturesDataset, self).__init__()
         self.inputs = features
         self.labels = labels 
         self.return_items = ["features", "label"]
@@ -29,6 +30,21 @@ class FeaturesDataset:
         fvec = self.inputs[idx]
         label = self.labels[idx]
         return {"features": fvec, "label": label}
+
+
+class PseudoLabelDataset(Dataset):
+
+    def __init__(self, images, labels):
+        super(PseudoLabelDataset, self).__init__()
+        self.images = images 
+        self.labels = labels 
+        self.return_items = ["img", "label"]
+
+    def __len__(self):
+        return len(self.images)
+
+    def __getitem__(self, idx):
+        return {"img": self.images[idx], "label": self.labels[idx]}
 
 
 class DoubleAugmentedDataset(Dataset):
@@ -80,6 +96,11 @@ def get_feature_dataloaders(features, labels, batch_size):
     train_loader = DataLoader(train_dset, batch_size=batch_size, shuffle=True, num_workers=4)
     test_loader = DataLoader(test_dset, batch_size=batch_size, shuffle=False, num_workers=4)
     return train_loader, test_loader
+
+def get_pseudolabel_dataloaders(images, labels, batch_size):
+    dataset = PseudoLabelDataset(images=images, labels=labels)
+    loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=4)
+    return loader
 
 def get_double_augment_dataloaders(dataset_name, root, transforms, batch_size):
     assert dataset_name in DATASETS.keys(), f"Unrecognized dataset {dataset_name}, expected one of {list(DATASETS.keys())}"

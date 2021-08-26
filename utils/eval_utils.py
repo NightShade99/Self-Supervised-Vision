@@ -6,7 +6,8 @@ import torch.nn as nn
 import torch.optim as optim 
 import torch.nn.functional as F
 import torch.optim.lr_scheduler as lr_sched
-from . import data_utils, losses
+from scipy.optimize import linear_sum_assignment
+from . import data_utils, common, losses
 
 
 def compute_neighbor_accuracy(fvecs, targets, k=20):
@@ -19,6 +20,19 @@ def compute_neighbor_accuracy(fvecs, targets, k=20):
     accuracy = np.mean(anchor_targets == neighbor_targets)
     return accuracy
 
+def hungarian_match(pred, targets, pred_k, targets_k):
+    num_samples = targets.shape[0]
+    num_correct = np.zeros((pred_k, pred_k))
+
+    for c1 in range(pred_k):
+        for c2 in range(pred_k):
+            votes = int(((pred == c1) * (targets == c2)).sum())
+            num_correct[c1, c2] = votes
+
+    match = linear_sum_assignment(num_samples - num_correct)
+    match = np.array(list(zip(*match)))
+    cls_map = {out_c: gt_c for out_c, gt_c in match}
+    return cls_map
 
 def linear_evaluation(config, train_data, test_data, num_classes, device):
     train_loader = data_utils.get_feature_dataloaders(train_data["fvecs"], train_data["labels"], batch_size=config["batch_size"])
@@ -36,7 +50,7 @@ def linear_evaluation(config, train_data, test_data, num_classes, device):
 
         for step, batch in enumerate(train_loader):
             fvecs, labels = batch["features"].to(device), batch["label"].to(device)
-            logits = clf_head(features)
+            logits = clf_head(fvecs)
             loss = loss_fn(F.log_softmax(logits, dim=-1), labels)
             acc = torch.mean(F.softmax(logits, dim=-1).argmax(dim=-1) == labels)
             
@@ -49,7 +63,7 @@ def linear_evaluation(config, train_data, test_data, num_classes, device):
         for step, batch in enumerate(test_loader):
             fvecs, labels = batch["features"].to(device), batch["label"].to(device)
             with torch.no_grad():
-                logits = clf_head(features)
+                logits = clf_head(fvecs)
             loss = loss_fn(F.log_softmax(logits, dim=-1), labels)
             acc = torch.mean(F.softmax(logits, dim=-1).argmax(dim=-1) == labels)
             test_meter.add({"loss": float(loss), "accuracy": float(acc)})
