@@ -1,12 +1,12 @@
 
-import torch 
+import torch
 import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
 
 
 class SimclrLoss(nn.Module):
-    
+
     def __init__(self, normalize=False, temperature=1.0):
         super(SimclrLoss, self).__init__()
         self.normalize = normalize
@@ -50,7 +50,7 @@ class MocoLoss(nn.Module):
 
     def __init__(self, normalize=True, temperature=1.0):
         super(MocoLoss, self).__init__()
-        self.normalize = normalize 
+        self.normalize = normalize
         self.temperature = temperature
 
     def forward(self, query, keys, memory_vectors):
@@ -80,11 +80,11 @@ class DinoLoss(nn.Module):
     def forward(self, teacher_fvecs, student_fvecs, temp_s, temp_t, center):
         # teacher_fvecs has size (bs, 2, K) with teacher_global features
         # student_fvecs has size (bs, 2+V, K) with (student_global, student_local) features stacked
-        targets_1 = teacher_fvecs[:, 0, :].unsqueeze(1).repeat(1, student_fvecs.size(1), 1)             # (bs, 2+V, K) of first global view features 
+        targets_1 = teacher_fvecs[:, 0, :].unsqueeze(1).repeat(1, student_fvecs.size(1), 1)             # (bs, 2+V, K) of first global view features
         targets_2 = teacher_fvecs[:, 1, :].unsqueeze(1).repeat(1, student_fvecs.size(1), 1)             # (bs, 2+V, K) of second global view features
         targets_1 = F.softmax((targets_1 - center) / temp_t, -1)
         targets_2 = F.softmax((targets_2 - center) / temp_t, -1)
-        loss_1 = -(targets_1 * F.log_softmax(student_fvecs / temp_s, -1)).sum(-1).mean()         
+        loss_1 = -(targets_1 * F.log_softmax(student_fvecs / temp_s, -1)).sum(-1).mean()
         loss_2 = -(targets_2 * F.log_softmax(student_fvecs / temp_s, -1)).sum(-1).mean()
         return loss_1 + loss_2
 
@@ -94,7 +94,7 @@ class PirlLoss(nn.Module):
     def __init__(self, normalize=True, temperature=1.0, loss_weight=0.5):
         super(PirlLoss, self).__init__()
         self.loss_weight = loss_weight
-        self.normalize = normalize 
+        self.normalize = normalize
         self.temp = temperature
 
     def forward(self, img_features, patch_features, memory_pos_features, memory_neg_features):
@@ -103,19 +103,19 @@ class PirlLoss(nn.Module):
             v_patch = F.normalize(patch_features, p=2, dim=-1)
         else:
             v_img = img_features
-            v_patch = patch_features 
+            v_patch = patch_features
 
         bs = img_features.size(0)
         mask = torch.zeros(bs, bs).fill_diagonal_(1).bool().to(img_features.device)
 
         pos_logits_1 = (torch.mm(memory_pos_features, v_patch.t()) / self.temp)[mask].view(bs, 1)                       # (bs, 1)
-        pos_logits_2 = (torch.mm(memory_pos_features, v_img.t()) / self.temp)[mask].view(bs, 1)                         # (bs, 1)                                    
+        pos_logits_2 = (torch.mm(memory_pos_features, v_img.t()) / self.temp)[mask].view(bs, 1)                         # (bs, 1)
         neg_logits = (torch.mm(memory_pos_features, memory_neg_features.t()) / self.temp).view(bs, -1)                  # (bs, K)
         logits_1, logits_2 = torch.cat((pos_logits_1, neg_logits), 1), torch.cat((pos_logits_2, neg_logits), 1)         # (bs, K+1)
         labels = torch.zeros(bs).long().to(img_features.device)
         loss_1, loss_2 = F.cross_entropy(logits_1, labels), F.cross_entropy(logits_2, labels)
         return self.loss_weight * loss_1 + (1.0 - self.loss_weight) * loss_2
-        
+
 
 class BarlowLoss(nn.Module):
 
@@ -131,7 +131,7 @@ class BarlowLoss(nn.Module):
         else:
             zi_norm = z_i
             zj_norm = z_j
-        
+
         bs, fsize = zi_norm.size()
         zi_norm = (zi_norm - zi_norm.mean(0)) / zi_norm.std(0)
         zj_norm = (zj_norm - zj_norm.mean(0)) / zj_norm.std(0)
@@ -155,9 +155,9 @@ class RelicLoss(nn.Module):
 
     def __init__(self, normalize=True, temperature=1.0, alpha=0.5):
         super(RelicLoss, self).__init__()
-        self.normalize = normalize 
+        self.normalize = normalize
         self.temperature = temperature
-        self.alpha = alpha 
+        self.alpha = alpha
 
     def forward(self, zi, zj, z_orig):
         bs = zi.shape[0]
@@ -192,10 +192,40 @@ class RelicLoss(nn.Module):
 
         logits = torch.cat((pos, neg), dim=1)                                                       # Shape (2N, 2N-1)
         contrastive_loss = F.cross_entropy(logits, labels)
-        
+
         logits_io = torch.mm(zi_norm, zo_norm.t()) / self.temperature
         logits_jo = torch.mm(zj_norm, zo_norm.t()) / self.temperature
         probs_io = F.softmax(logits_io[torch.logical_not(mask)], -1)
         probs_jo = F.log_softmax(logits_jo[torch.logical_not(mask)], -1)
         kl_div_loss = F.kl_div(probs_io, probs_jo, log_target=True, reduction="sum")
         return contrastive_loss + self.alpha * kl_div_loss
+
+
+class SwavLoss(nn.Module):
+
+    def __init__(self, temperature=0.1, sinkhorn_eps=0.05, sinkhorn_iters=3):
+        super(SwavLoss, self).__init__()
+        self.temperature = temperature
+        self.n_iters = sinkhorn_iters
+        self.eps = sinkhorn_eps
+
+    def compute_codes_sinkhorn(self, scores):
+        Q = torch.exp(scores / self.eps).t()
+        Q = Q / torch.sum(Q)
+        K, B = Q.size()
+        u, r, c = torch.zeros(K), torch.ones(K) / K, torch.ones(B) / B
+        for _ in range(self.sinkhorn_iters):
+            u = torch.sum(Q, 1)
+            Q = Q * (r / u).unsqueeze(1)
+            Q = Q * (c / Q.sum(0)).unsqueeze(0)
+        return (Q / Q.sum(0, keepdim=True)).t()
+
+    def forward(self, z_1, z_2, prototypes, bank_features=None):
+        if bank_features is not None:
+            z_1 = torch.cat((z_1, bank_features), 0)
+            z_2 = torch.cat((z_2, bank_features), 0)
+
+        scores_1, scores_2 = torch.mm(z_1, self.prototypes()), torch.mm(z_2, self.prototypes())
+        q_1, q_2 = self.compute_codes_sinkhorn(scores_1), self.compute_codes_sinkhorn(scores_2)
+        p_1, p_2 = F.log_softmax(scores_1 / self.temperature, -1), F.log_softmax(scores_2 / self.temperature, -1)
+        loss = - 0.5 * torch.mean(torch.sum(q_1 * p_2, 1) + torch.sum(q_2 * p_1, 1), 0)

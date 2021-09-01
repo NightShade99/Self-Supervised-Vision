@@ -1,11 +1,11 @@
 
-import os 
-import argparse 
+import os
+import argparse
 import numpy as np
-from datetime import datetime as dt 
+from datetime import datetime as dt
 from models import (
     simclr, moco, byol, dino, pirl, barlow, simsiam, relic,
-    deep_cluster
+    deep_cluster, swav
 )
 
 TASKS = ["train", "linear_eval", "get_features"]
@@ -20,7 +20,8 @@ ALGORITHMS = {
     "barlow": barlow.BarlowTwins,
     "simsiam": simsiam.SimpleSiameseNetworks,
     "relic": relic.InvariantCausalRepresentationLearning,
-    "deep_cluster": deep_cluster.DeepCluster
+    "deep_cluster": deep_cluster.DeepCluster,
+    "swav": swav.SwappingAssignmentsBetweenViews
 }
 
 def _check_checkpoint_specified(args):
@@ -57,7 +58,7 @@ if __name__ == "__main__":
         _check_checkpoint_specified(args)
         train_fvecs, train_gt = model.build_features(split="train")
         test_fvecs, test_gt = model.build_features(split="test")
-        
+
         with open(os.path.join(model.output_dir, "train_fvecs.npy"), "w") as f:
             np.save(f, train_fvecs)
         with open(os.path.join(model.output_dir, "train_gt.npy"), "w") as f:
