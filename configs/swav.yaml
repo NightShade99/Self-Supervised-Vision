@@ -47,7 +47,7 @@ optimizer:
   lr: 2.0
   momentum: 0.9
   nesterov: True
-  weight_decay: 1.0e-04
+  weight_decay: 1.0e-06
 
 scheduler:
   name: cosine

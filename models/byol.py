@@ -1,13 +1,13 @@
 
 import os
 import math
-import torch 
+import torch
 import wandb
-import numpy as np 
+import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
 
-from networks import resnet, vit 
+from networks import resnet, vit
 from utils import common, losses
 from utils import train_utils, data_utils, eval_utils
 
@@ -35,10 +35,10 @@ class MLP(nn.Module):
 
 
 class OnlineNetwork(nn.Module):
-    
+
     def __init__(self, encoder, encoder_dim, projection_dim):
         super(OnlineNetwork, self).__init__()
-        self.encoder = encoder 
+        self.encoder = encoder
         self.proj_head = MLP(encoder_dim, projection_dim)
         self.pred_head = MLP(projection_dim, projection_dim)
 
@@ -51,7 +51,7 @@ class TargetNetwork(nn.Module):
 
     def __init__(self, encoder, encoder_dim, projection_dim):
         super(TargetNetwork, self).__init__()
-        self.encoder = encoder 
+        self.encoder = encoder
         self.proj_head = MLP(encoder_dim, projection_dim)
 
     def forward(self, x):
@@ -62,9 +62,10 @@ class TargetNetwork(nn.Module):
 class BootstrapYourOwnLatent:
 
     def __init__(self, args):
-        assert args["arch"] in NETWORKS.keys(), f"Expected 'arch' to be one of {list(NETWORKS.keys())}"
+        assert args["arch"] in NETWORKS.keys(
+        ), f"Expected 'arch' to be one of {list(NETWORKS.keys())}"
         output_root = os.path.join("outputs/byol", args["arch"])
-        
+
         self.config, self.output_dir, self.logger, self.device = common.initialize_experiment(args, output_root)
         self.train_loader, self.test_loader = data_utils.get_double_augment_dataloaders(**self.config["data"])
         run = wandb.init(**self.config["wandb"])
@@ -75,18 +76,19 @@ class BootstrapYourOwnLatent:
         self.target_network = TargetNetwork(encoder(**self.config["encoder"]), encoder_dim, self.config["proj_dim"]).to(self.device)
         self.max_steps = self.config["epochs"] * len(self.train_loader)
         self.tau = self.config.get("tau", 0.996)
- 
+
         for p in self.target_network.parameters():
             p.requires_grad = False
 
         self.optim = train_utils.get_optimizer(self.config["optimizer"], params=self.online_network.parameters())
         self.scheduler, self.warmup_epochs = train_utils.get_scheduler({**self.config["scheduler"], "epochs": self.config["epochs"]}, optimizer=self.optim)
         if self.warmup_epochs > 0:
-            self.warmup_rate = (self.config["optimizer"]["lr"] - 1e-12) / self.warmup_epochs
+            self.warmup_rate = (
+                self.config["optimizer"]["lr"] - 1e-12) / self.warmup_epochs
 
         self.loss_fn = nn.MSELoss()
         self.best_metric = 0
-        
+
         if args["load"] is not None:
             self.load_checkpoint(args["load"])
 
@@ -129,7 +131,7 @@ class BootstrapYourOwnLatent:
 
         self.optim.zero_grad()
         loss.backward()
-        self.optim.step()                
+        self.optim.step()
         return {"loss": loss.item()}
 
     @torch.no_grad()
@@ -158,7 +160,8 @@ class BootstrapYourOwnLatent:
                 common.progress_bar(progress=(step+1)/len(self.test_loader), desc="Building test features")
             print()
         else:
-            raise ValueError(f"Unrecognized split {split}, expected one of [train, test]")
+            raise ValueError(
+                f"Unrecognized split {split}, expected one of [train, test]")
 
         fvecs, gt = np.concatenate(fvecs, axis=0), np.concatenate(gt, axis=0)
         return fvecs, gt
@@ -167,11 +170,11 @@ class BootstrapYourOwnLatent:
         train_vecs, train_gt = self.build_features(split="train")
         test_vecs, test_gt = self.build_features(split="test")
         test_linear_acc = eval_utils.linear_evaluation(
-            config = self.config["linear_eval"],
-            train_data = {"fvecs": train_vecs, "labels": train_gt},
-            test_data = {"fvecs": test_vecs, "labels": test_gt},
-            num_classes = 10,
-            device = self.device
+            config=self.config["linear_eval"],
+            train_data={"fvecs": train_vecs, "labels": train_gt},
+            test_data={"fvecs": test_vecs, "labels": test_gt},
+            num_classes=10,
+            device=self.device
         )
         self.logger.write("Test linear eval accuracy: {:.4f}".format(test_linear_acc), mode="info")
 
@@ -202,4 +205,4 @@ class BootstrapYourOwnLatent:
                     self.save_checkpoint()
         print()
         self.logger.print("Completed training. Beginning linear evaluation.", mode="info")
-        self.perform_linear_eval()       
+        self.perform_linear_eval()

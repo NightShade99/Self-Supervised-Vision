@@ -38,19 +38,20 @@ class EncoderModel(nn.Module):
         x = self.encoder(x)
         x = self.proj_head(x)
         x = F.normalize(x, p=2, dim=-1)
+        return x
 
 
 class Prototypes(nn.Module):
 
-    def __init__(self, hidden_dim, prototype_dim):
+    def __init__(self, hidden_dim, prototype_size):
         super(Prototypes, self).__init__()
-        self.embedding = nn.Embedding(hidden_dim, prototype_dim)
+        self.proto_size = prototype_size
+        self.embedding = nn.Embedding(prototype_size, hidden_dim)
 
-    def forward(self):
-        weight = self.embedding.weight.data.clone()
-        weight = F.normalize(weight, p=2, dim=-1)
-        self.embedding.weight.data.copy_(weight)
-        return weight
+    def forward(self, device):
+        indices = torch.arange(self.proto_size).long().to(device)
+        vectors = F.normalize(self.embedding(indices), p=2, dim=-1)
+        return vectors
 
 
 class FeatureBank:
@@ -73,8 +74,9 @@ class FeatureBank:
             if self.ptr >= self.bank_size:
                 self.ptr = 0
 
-    def return_vectors(self):
-        return self.vectors
+    def return_vectors(self, device):
+        vectors = self.vectors.to(device)
+        return vectors
 
 
 class SwappingAssignmentsBetweenViews:
@@ -90,8 +92,9 @@ class SwappingAssignmentsBetweenViews:
 
         encoder, encoder_dim = NETWORKS[args["arch"]].values()
         self.model = EncoderModel(encoder(**self.config["encoder"]), encoder_dim, self.config["hidden_dim"], self.config["proj_dim"]).to(self.device)
-        self.prototypes = Prototypes(self.config["hidden_dim"], self.config["prototype_size"]).to(self.device)
+        self.prototypes = Prototypes(self.config["proj_dim"], self.config["prototype_size"]).to(self.device)
         self.feature_bank = FeatureBank(self.config["feature_bank_size"], self.config["proj_dim"])
+        self.initialize_feature_bank()
 
         self.optim = train_utils.get_optimizer(self.config["optimizer"], params=list(self.model.parameters())+list(self.prototypes.parameters()))
         self.scheduler, self.warmup_epochs = train_utils.get_scheduler({**self.config["scheduler"], "epochs": self.config["epochs"]}, optimizer=self.optim)
@@ -105,14 +108,13 @@ class SwappingAssignmentsBetweenViews:
             self.load_checkpoint(args["load"])
 
     def save_checkpoint(self):
-        state = {"encoder": self.model.state_dict(), "prototypes": self.prototypes()}
+        state = {"encoder": self.model.state_dict()}
         torch.save(state, os.path.join(self.output_dir, "best_model.pt"))
 
     def load_checkpoint(self, ckpt_dir):
         if os.path.exists(os.path.join(ckpt_dir, "best_model.pt")):
             state = torch.load(os.path.join(ckpt_dir, "best_model.pt"), map_location=self.device)
             self.model.load_state_dict(state["encoder"])
-            self.protoypes.embedding.weight.data.copy_(state["prototypes"])
             self.logger.print(f"Successfully loaded model from {ckpt_dir}")
         else:
             raise NotImplementedError(f"Could not find saved checkpoint at {ckpt_dir}")
@@ -126,11 +128,17 @@ class SwappingAssignmentsBetweenViews:
         else:
             pass
 
+    def initialize_feature_bank(self):
+        self.logger.print("Initializing feature bank", mode="info")
+        fvecs, gt = self.build_features(split="train")
+        fvecs = torch.tensor(fvecs[-self.config["feature_bank_size"]:]).float()
+        self.feature_bank.add_vectors(fvecs)
+
     def train_step(self, batch):
         img_1, img_2 = batch["aug_1"].to(self.device), batch["aug_2"].to(self.device)
         z_1, z_2 = self.model(img_1), self.model(img_2)
-        loss = self.loss_fn(z_1, z_2, self.prototypes(), self.feature_bank.return_vectors())
-        self.feature_bank.add_vectors(fvecs=torch.cat([z_1, z_2], 0))
+        loss = self.loss_fn(z_1, z_2, self.prototypes(self.device), self.feature_bank.return_vectors(self.device))
+        self.feature_bank.add_vectors(fvecs=torch.cat([z_1, z_2], 0).detach().cpu())
 
         self.optim.zero_grad()
         loss.backward()
@@ -150,7 +158,7 @@ class SwappingAssignmentsBetweenViews:
         if split == "train":
             for step, batch in enumerate(self.train_loader):
                 img, trg = batch["img"].to(self.device), batch["label"].detach().cpu().numpy()
-                z = self.model(img)
+                z = self.model(img).detach().cpu().numpy()
                 fvecs.append(z), gt.append(trg)
                 common.progress_bar(progress=(step+1)/len(self.train_loader), desc="Building train features")
             print()
@@ -158,7 +166,7 @@ class SwappingAssignmentsBetweenViews:
         elif split == "test":
             for step, batch in enumerate(self.test_loader):
                 img, trg = batch["img"].to(self.device), batch["label"].detach().cpu().numpy()
-                z = self.model(img)
+                z = self.model(img).detach().cpu().numpy()
                 fvecs.append(z), gt.append(trg)
                 common.progress_bar(progress=(step+1)/len(self.test_loader), desc="Building test features")
             print()

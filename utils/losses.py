@@ -205,27 +205,31 @@ class SwavLoss(nn.Module):
 
     def __init__(self, temperature=0.1, sinkhorn_eps=0.05, sinkhorn_iters=3):
         super(SwavLoss, self).__init__()
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.temperature = temperature
         self.n_iters = sinkhorn_iters
         self.eps = sinkhorn_eps
 
+    @torch.no_grad()
     def compute_codes_sinkhorn(self, scores):
         Q = torch.exp(scores / self.eps).t()
         Q = Q / torch.sum(Q)
         K, B = Q.size()
-        u, r, c = torch.zeros(K), torch.ones(K) / K, torch.ones(B) / B
-        for _ in range(self.sinkhorn_iters):
+        u, r, c = torch.zeros(K, device=self.device), torch.ones(K, device=self.device) / K, torch.ones(B, device=self.device) / B
+        for _ in range(self.n_iters):
             u = torch.sum(Q, 1)
             Q = Q * (r / u).unsqueeze(1)
             Q = Q * (c / Q.sum(0)).unsqueeze(0)
-        return (Q / Q.sum(0, keepdim=True)).t()
+        final = (Q / Q.sum(0, keepdim=True)).t()
+        return final
 
     def forward(self, z_1, z_2, prototypes, bank_features=None):
         if bank_features is not None:
             z_1 = torch.cat((z_1, bank_features), 0)
             z_2 = torch.cat((z_2, bank_features), 0)
 
-        scores_1, scores_2 = torch.mm(z_1, self.prototypes()), torch.mm(z_2, self.prototypes())
+        scores_1, scores_2 = torch.mm(z_1, prototypes.t()), torch.mm(z_2, prototypes.t())
         q_1, q_2 = self.compute_codes_sinkhorn(scores_1), self.compute_codes_sinkhorn(scores_2)
         p_1, p_2 = F.log_softmax(scores_1 / self.temperature, -1), F.log_softmax(scores_2 / self.temperature, -1)
         loss = - 0.5 * torch.mean(torch.sum(q_1 * p_2, 1) + torch.sum(q_2 * p_1, 1), 0)
+        return loss
