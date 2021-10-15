@@ -198,7 +198,7 @@ class SeLA:
             self.logger.write("Epoch {:4d}/{:4d} ".format(epoch, self.config["epochs"]) + train_meter.return_msg(), mode="train")
             self.adjust_learning_rate(epoch)
             
-            if epoch in self.sl_epochs == 0:
+            if epoch in self.sl_epochs:
                 self.self_label_step(num_iters=self.config["self_label_iters"])
 
             if epoch % self.config["eval_every"] == 0:
