@@ -2,9 +2,11 @@
 **This repo is a work in progress!**
 
 ## About
+<a name="about"></a>
 Implementations and observations on some self-supervised methods used to pre-train networks for vision tasks. This is an exploratory project; these experiments were run to develop some intuition about the working of and differences between these methods. The shown performance scores might not be SOTA, especially considering most authors have trained there algorithms on ILSVRC 2012 (ImageNet) data, whereas I have trained on CIFAR10.
 
 ## Algorithms
+<a name="algorithms"></a>
 The algorithms checked in the table below will be implemented (or have been, if the KNN accuracy is mentioned). This is not an exhaustive list: I'll add more papers to it as I find them.
 
 |                                   Algorithm                                   |  Shorthand  |                     Paper                     | KNN accuracy |
@@ -23,3 +25,12 @@ The algorithms checked in the table below will be implemented (or have been, if 
 | Emerging Properties in Self-Supervised Vision Transformers                    |     DINO    |   [arXiv](https://arxiv.org/abs/2104.14294)   |              |
 | Barlow Twins: Self-Supervised Learning via Redundancy Reduction               |    Barlow   |   [arXiv](https://arxiv.org/abs/2103.03230)   |    56.81     |
 
+## Usage
+<a name="usage"></a>
+If you wish to train any of these models on your end (on CIFAR10), run this command inside `Self-Supervised-Vision/`.
+
+```
+python main.py --config configs/<model>.yaml --algo <model> --arch <arch> --task train
+```
+
+Here, `<model>` is the algorithm's shorthand in lowercase (refer [algorithms](Algorithms)) and `<arch>` is one of `resnet18, resnet50, resnext50, resnext101, wide_resnet50, wide_resnet101` (`resnet18` by default).
