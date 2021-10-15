@@ -27,10 +27,10 @@ The algorithms checked in the table below will be implemented (or have been, if 
 
 ## Usage
 <a name="usage"></a>
-If you wish to train any of these models on your end (on CIFAR10), run this command inside `Self-Supervised-Vision/`.
+To train any of these models on your end (on CIFAR10), run this command inside `Self-Supervised-Vision/`.
 
 ```
 python main.py --config configs/<model>.yaml --algo <model> --arch <arch> --task train
 ```
 
-Here, `<model>` is the algorithm's shorthand in lowercase (refer [Algorithms](algorithms)) and `<arch>` is one of `resnet18, resnet50, resnext50, resnext101, wide_resnet50, wide_resnet101` (`resnet18` by default).
+Here, `<model>` is the algorithm's shorthand in lowercase (refer [Algorithms](#markdown-header-algorithms)) and `<arch>` is one of `resnet18, resnet50, resnext50, resnext101, wide_resnet50, wide_resnet101` (`resnet18` by default).
