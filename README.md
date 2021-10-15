@@ -33,4 +33,4 @@ If you wish to train any of these models on your end (on CIFAR10), run this comm
 python main.py --config configs/<model>.yaml --algo <model> --arch <arch> --task train
 ```
 
-Here, `<model>` is the algorithm's shorthand in lowercase (refer [algorithms](Algorithms)) and `<arch>` is one of `resnet18, resnet50, resnext50, resnext101, wide_resnet50, wide_resnet101` (`resnet18` by default).
+Here, `<model>` is the algorithm's shorthand in lowercase (refer [Algorithms](algorithms)) and `<arch>` is one of `resnet18, resnet50, resnext50, resnext101, wide_resnet50, wide_resnet101` (`resnet18` by default).
