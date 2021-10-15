@@ -52,7 +52,7 @@ class EncoderModel(nn.Module):
         return self.proj_head(self.relu(self.encoder(x)))
 
 
-class MomentumContrast:
+class MoCo:
 
     def __init__(self, args):
         assert args["arch"] in NETWORKS.keys(), f"Expected 'arch' to be one of {list(NETWORKS.keys())}"

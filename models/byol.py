@@ -59,7 +59,7 @@ class TargetNetwork(nn.Module):
         return F.normalize(x, dim=-1, p=2)
 
 
-class BootstrapYourOwnLatent:
+class BYOL:
 
     def __init__(self, args):
         assert args["arch"] in NETWORKS.keys(

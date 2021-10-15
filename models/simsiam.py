@@ -69,7 +69,7 @@ class TargetNetwork(nn.Module):
         return F.normalize(x, dim=-1, p=2)
 
 
-class SimpleSiameseNetworks:
+class SimSiam:
 
     def __init__(self, args):
         assert args["arch"] in NETWORKS.keys(), f"Expected 'arch' to be one of {list(NETWORKS.keys())}"

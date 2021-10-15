@@ -77,7 +77,7 @@ class EncoderModel(nn.Module):
             return image_features 
 
 
-class PretextInvariantRepresentationModel:
+class PIRL:
 
     def __init__(self, args):
         assert args["arch"] in NETWORKS.keys(), f"Expected 'arch' to be one of {list(NETWORKS.keys())}"

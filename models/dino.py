@@ -42,7 +42,7 @@ class EncoderModel(nn.Module):
         return x
 
 
-class DistillationWithNoLabels:
+class DINO:
 
     def __init__(self, args):
         assert args["arch"] in NETWORKS.keys(), f"Expected 'arch' to be one of {list(NETWORKS.keys())}"

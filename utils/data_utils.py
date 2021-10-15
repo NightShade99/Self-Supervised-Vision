@@ -34,17 +34,23 @@ class FeaturesDataset(Dataset):
 
 class PseudoLabelDataset(Dataset):
 
-    def __init__(self, images, labels):
+    def __init__(self, dataset, transforms, labels=None):
         super(PseudoLabelDataset, self).__init__()
-        self.images = images 
-        self.labels = labels 
-        self.return_items = ["img", "label"]
+        self.dataset = dataset
+        self.labels = labels
+        self.aug_transform = get_transform(transforms["aug"])
+        self.std_transform = get_transform(transforms["std"])
+        self.return_items = ["img", "aug", "label"]
 
     def __len__(self):
-        return len(self.images)
+        return len(self.dataset)
 
     def __getitem__(self, idx):
-        return {"img": self.images[idx], "label": self.labels[idx]}
+        orig_img, gt = self.dataset[idx]
+        aug = self.aug_transform(orig_img)
+        img = self.std_transform(orig_img)
+        label = self.labels[idx] if self.labels is not None else gt 
+        return {"idx": idx, "img": img, "aug": aug, "label": label}
 
 
 class DoubleAugmentedDataset(Dataset):
@@ -97,10 +103,12 @@ def get_feature_dataloaders(features, labels, batch_size):
     test_loader = DataLoader(test_dset, batch_size=batch_size, shuffle=False, num_workers=4)
     return train_loader, test_loader
 
-def get_pseudolabel_dataloaders(images, labels, batch_size):
-    dataset = PseudoLabelDataset(images=images, labels=labels)
-    loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=4)
-    return loader
+def get_pseudolabel_dataloaders(train_dset, test_dset, train_labels, root, transforms, batch_size):
+    train_dataset = PseudoLabelDataset(dataset=train_dset, transforms=transforms, labels=train_labels)
+    test_dataset = PseudoLabelDataset(dataset=test_dset, transforms=transforms, labels=None)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
+    return train_loader, test_loader
 
 def get_double_augment_dataloaders(dataset_name, root, transforms, batch_size):
     assert dataset_name in DATASETS.keys(), f"Unrecognized dataset {dataset_name}, expected one of {list(DATASETS.keys())}"

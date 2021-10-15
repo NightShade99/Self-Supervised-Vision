@@ -1,0 +1,64 @@
+
+# Training configuration for SwAV
+
+epochs: 500
+eval_every: 10
+self_label_iters: 80
+
+num_clusters: 128
+num_cluster_heads: 10
+lambda: 25
+
+data:
+  dataset_name: cifar10
+  root: data/cifar10
+  batch_size: 500
+  transforms:
+    aug:
+      color_jitter:
+        brightness: 0.4
+        contrast: 0.4
+        saturation: 0.4
+        hue: 0.1
+        apply_prob: 0.8
+      random_gray:
+        p: 0.2
+      random_resized_crop:
+        size: [32, 32]
+        scale: [0.2, 1.0]
+      random_flip:
+      to_tensor:
+      normalize:
+        mean: [0.4914, 0.4822, 0.4465]
+        std: [0.2470, 0.2435, 0.2616]
+    std:
+      center_crop:
+        size: [32, 32]
+      to_tensor:
+      normalize:
+        mean: [0.4914, 0.4822, 0.4465]
+        std: [0.2470, 0.2435, 0.2616]
+
+encoder:
+  reduce_bottom_conv: True
+
+optimizer:
+  name: sgd
+  lr: 0.05
+  momentum: 0.9
+  nesterov: True
+  weight_decay: 1.0e-06
+
+scheduler:
+  name: multistep
+  milestones: [100, 250, 400]
+  gamma: 0.1
+
+linear_eval:
+  epochs: 100
+  input_dim: 512
+  batch_size: 256
+  lr: 0.1
+
+wandb:
+  project: self-supervised-vision
