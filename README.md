@@ -1,5 +1,5 @@
 # Self Supervised Vision
-**This repo is a work in progress!**
+**This repo will always be a work in progress!**
 
 ## About
 <a name="about"></a>
