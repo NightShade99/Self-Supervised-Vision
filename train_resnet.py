@@ -121,30 +121,34 @@ def main(args):
     # Functions for training and evaluation
     # These will be pmapped later for computation across devices
     def compute_metrics(logits, labels):
-        loss = optax.softmax_cross_entropy(logits, labels)
+        labels_onehot = jax.nn.one_hot(labels, num_classes=num_classes)
+        loss = optax.softmax_cross_entropy(logits, labels_onehot)
+        loss = jnp.mean(loss)
+
         accuracy = jnp.mean(jnp.argmax(logits, -1) == labels)
         metrics = {'loss': loss, 'accuracy': accuracy}
         
         metrics = jax.lax.pmean(metrics, axis_name='device')
-        metrics = common_utils.get_metrics(metrics)
-        metrics = jax.tree_map(lambda x: x.mean(), metrics)
+        metrics = jax.tree_util.tree_map(lambda x: x.mean(), metrics)
         return metrics
     
     @functools.partial(jax.pmap, axis_name='device')
     def train_step(batch, state):
         images, labels = batch
-        labels = jax.nn.one_hot(labels, num_classes=num_classes)
-        
+        images, labels = images[0], labels[0]
+
         def loss_fn(params):
             outputs, new_state = state.apply_fn(
                 {'params': params, 'batch_stats': state.batch_stats},
                 images, train=True, mutable=['batch_stats']
             )
             logits = nn.log_softmax(outputs['outputs'], -1)
-            loss = optax.softmax_cross_entropy(logits, labels)
-            
+            labels_onehot = jax.nn.one_hot(labels, num_classes=num_classes)
+            loss = optax.softmax_cross_entropy(logits, labels_onehot)
+            loss = jnp.mean(loss)
+
             # L2 weight decay
-            weight_penalty_params = jax.tree_leaves(params)
+            weight_penalty_params = jax.tree_util.tree_leaves(params)
             weight_l2 = sum([jnp.sum(x ** 2) for x in weight_penalty_params if x.ndim > 1])
             loss = loss + args.weight_decay * 0.5 * weight_l2
             return loss, (logits, new_state)
@@ -160,8 +164,8 @@ def main(args):
     @functools.partial(jax.pmap, axis_name='device')
     def eval_step(batch, state):
         images, labels = batch
-        labels = jax.nn.one_hot(labels, num_classes=num_classes)
-        
+        images, labels = images[0], labels[0]
+
         variables = {'params': state.params, 'batch_stats': state.batch_stats}
         outputs = state.apply_fn(variables, images, train=False, mutable=False)
         logits = nn.log_softmax(outputs['outputs'], -1)
@@ -205,7 +209,7 @@ def main(args):
                 
         # Evaluation
         for step, batch in enumerate(val_loader):
-            metrics = eval_step(batch)
+            metrics = eval_step(batch, state)
             val_meter.add(metrics)
             
             if jax.process_index() == 0:

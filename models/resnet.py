@@ -113,7 +113,7 @@ class ResNet(nn.Module):
             x = nn.Dense(self.num_classes, dtype=self.dtype)(x)
         x = jnp.asarray(x, self.dtype)
         
-        return {'output': x}
+        return {'outputs': x}
     
     
 # Model templates
