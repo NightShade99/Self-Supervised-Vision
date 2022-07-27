@@ -7,22 +7,24 @@ from torchvision import datasets
 from .transforms import build_transform
 
 
-def numpy_collate(batch):
-    if isinstance(batch[0], np.ndarray):
-        return np.stack(batch)
-    elif isinstance(batch[0], (tuple,list)):
-        transposed = zip(*batch)
-        return [numpy_collate(samples) for samples in transposed]
-    else:
-        return np.array(batch)
-    
-    
 def split_across_devices(xs):
     return jax.tree_map(
         lambda x: x.reshape((jax.local_device_count(), -1) + x.shape[1:]) \
             if len(x.shape) != 0 else x, 
         xs
     )
+
+
+def numpy_collate(batch):
+    if isinstance(batch[0], np.ndarray):
+        batch = np.stack(batch)
+    elif isinstance(batch[0], (tuple, list)):
+        transposed = zip(*batch)
+        batch = [numpy_collate(samples) for samples in transposed]
+    else:
+        batch = np.array(batch)
+    batch = split_across_devices(batch)
+    return batch
     
     
 def get_datasets(name, root, train_transform_cfg, val_transform_cfg):

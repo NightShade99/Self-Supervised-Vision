@@ -133,7 +133,8 @@ def main(args):
     @functools.partial(jax.pmap, axis_name='device')
     def train_step(batch, state):
         images, labels = batch
-        images = dataset.split_across_devices(images)
+        print(images.shape, labels.shape)
+        exit()
         labels = jax.nn.one_hot(labels, num_classes=num_classes)
         
         def loss_fn(params):
@@ -154,14 +155,13 @@ def main(args):
         grads = jax.lax.pmean(grads, axis_name='device')
         
         logits, new_state = aux[1]
-        metrics = compute_metrics(logits, labels)
         new_state = state.apply_gradients(grads=grads, batch_stats=new_state['batch_stats'])
+        metrics = compute_metrics(logits, labels)
         return new_state, metrics
 
     @functools.partial(jax.pmap, axis_name='device')
     def eval_step(batch, state):
         images, labels = batch
-        images = dataset.split_across_devices(images)
         labels = jax.nn.one_hot(labels, num_classes=num_classes)
         
         variables = {'params': state.params, 'batch_stats': state.batch_stats}
