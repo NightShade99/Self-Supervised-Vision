@@ -17,7 +17,7 @@ import jax.numpy as jnp
 import flax.linen as nn
 from flax import jax_utils
 from flax.training import train_state
-from flax.training import common_utils
+from flax.training import checkpoints
 
 os.environ['XLA_PYTHON_CLIENT_ALLOCATOR'] = 'platform'
 
@@ -91,29 +91,25 @@ def main(args):
     lr_schedule = optimization.build_lr_schedule(**cfg['lr_schedule'])
     optimizer = optimization.build_optimizer(cfg['optimizer']['name'], lr_schedule=lr_schedule)
     
+    state = TrainState.create(
+        apply_fn=model.apply,
+        params=variables['params'],
+        batch_stats=variables['batch_stats'],
+        tx=optimizer
+    )
+    
     # Logging and checkpoint loading
     if args.load is None:
         expt_time = dt.now().strftime('%d-%m-%Y_%H-%M')
         workdir = os.path.join('outputs', args.expt_name, args.model, expt_time)
         os.makedirs(workdir, exist_ok=True)
         
-        state = TrainState.create(
-            apply_fn=model.apply,
-            params=variables['params'],
-            batch_stats=variables['batch_stats'],
-            tx=optimizer
-        )
         logger = common.Logger(workdir)
         if args.wandb:
             run = wandb.init(project='jax-classification', name=expt_time)
             logger.write("Wandb URL: {}".format(run.get_url()))
     else:
-        ckpt_file = os.path.join(args.load, 'ckpt.pkl')
-        if os.path.exists(ckpt_file):
-            with open(ckpt_file, 'rb') as f:
-                state = pickle.load(f)
-        else:
-            raise FileNotFoundError(f'Could not find checkpoint at {args.load}')
+        state = checkpoints.restore(args.load, state)
             
     state = jax_utils.replicate(state)
     best_val_acc = -float("inf")
@@ -121,30 +117,34 @@ def main(args):
     # Functions for training and evaluation
     # These will be pmapped later for computation across devices
     def compute_metrics(logits, labels):
-        loss = optax.softmax_cross_entropy(logits, labels)
+        labels_onehot = jax.nn.one_hot(labels, num_classes=num_classes)
+        loss = optax.softmax_cross_entropy(logits, labels_onehot)
+        loss = jnp.mean(loss)
+
         accuracy = jnp.mean(jnp.argmax(logits, -1) == labels)
         metrics = {'loss': loss, 'accuracy': accuracy}
         
         metrics = jax.lax.pmean(metrics, axis_name='device')
-        metrics = common_utils.get_metrics(metrics)
-        metrics = jax.tree_map(lambda x: x.mean(), metrics)
+        metrics = jax.tree_util.tree_map(lambda x: x.mean(), metrics)
         return metrics
     
     @functools.partial(jax.pmap, axis_name='device')
     def train_step(batch, state):
         images, labels = batch
-        labels = jax.nn.one_hot(labels, num_classes=num_classes)
-        
+        images, labels = images[0], labels[0]
+
         def loss_fn(params):
             outputs, new_state = state.apply_fn(
                 {'params': params, 'batch_stats': state.batch_stats},
                 images, train=True, mutable=['batch_stats']
             )
             logits = nn.log_softmax(outputs['outputs'], -1)
-            loss = optax.softmax_cross_entropy(logits, labels)
-            
+            labels_onehot = jax.nn.one_hot(labels, num_classes=num_classes)
+            loss = optax.softmax_cross_entropy(logits, labels_onehot)
+            loss = jnp.mean(loss)
+
             # L2 weight decay
-            weight_penalty_params = jax.tree_leaves(params)
+            weight_penalty_params = jax.tree_util.tree_leaves(params)
             weight_l2 = sum([jnp.sum(x ** 2) for x in weight_penalty_params if x.ndim > 1])
             loss = loss + args.weight_decay * 0.5 * weight_l2
             return loss, (logits, new_state)
@@ -160,8 +160,8 @@ def main(args):
     @functools.partial(jax.pmap, axis_name='device')
     def eval_step(batch, state):
         images, labels = batch
-        labels = jax.nn.one_hot(labels, num_classes=num_classes)
-        
+        images, labels = images[0], labels[0]
+
         variables = {'params': state.params, 'batch_stats': state.batch_stats}
         outputs = state.apply_fn(variables, images, train=False, mutable=False)
         logits = nn.log_softmax(outputs['outputs'], -1)
@@ -175,8 +175,8 @@ def main(args):
     def save_checkpoint(state, workdir):
         if jax.process_index() == 0:
             state = jax.device_get(jax.tree_map(lambda x: x[0], state))
-            with open(os.path.join(workdir, 'ckpt.pkl'), 'wb') as f:
-                pickle.dump(state, f)
+            step = int(state.step)
+            checkpoints.save_checkpoint(workdir, state, step, keep=3)
     
     # Training loop
     for epoch in range(1, args.train_epochs+1):
@@ -205,7 +205,7 @@ def main(args):
                 
         # Evaluation
         for step, batch in enumerate(val_loader):
-            metrics = eval_step(batch)
+            metrics = eval_step(batch, state)
             val_meter.add(metrics)
             
             if jax.process_index() == 0:
