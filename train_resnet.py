@@ -50,7 +50,13 @@ def main(args):
         
     # Datasets and dataloaders
     trainset, valset = dataset.get_datasets(**cfg['data'])
-    inp_shape = (32, 32, 3) if 'cifar' in cfg['data']['name'] else (224, 224, 3)
+    
+    if 'cifar' in cfg['data']['name']:
+        inp_shape = (32, 32, 3)
+        num_classes = 10
+    elif 'imagenet' in cfg['data']['name']:
+        inp_shape = (224, 224, 3)
+        num_classes = 1000
     
     train_loader = data.DataLoader(
         trainset, 
@@ -75,7 +81,7 @@ def main(args):
     assert args.model in MODELS, f'Invalid model "{args.model}"'
     
     model = MODELS[args.model](
-        num_classes=trainset.num_classes,
+        num_classes=num_classes,
         small_images=('cifar' in cfg['data']['name']),
         use_classifier=(args.algo == 'classification')
     )
@@ -127,8 +133,8 @@ def main(args):
     @functools.partial(jax.pmap, axis_name='device')
     def train_step(batch, state):
         images, labels = batch
-        images = dataset.shard(images)
-        labels = jax.nn.one_hot(labels, num_classes=trainset.num_classes)
+        images = dataset.split_across_devices(images)
+        labels = jax.nn.one_hot(labels, num_classes=num_classes)
         
         def loss_fn(params):
             outputs, new_state = state.apply(
@@ -155,8 +161,8 @@ def main(args):
     @functools.partial(jax.pmap, axis_name='device')
     def eval_step(batch, state):
         images, labels = batch
-        images = dataset.shard(images)
-        labels = jax.nn.one_hot(labels, num_classes=trainset.num_classes)
+        images = dataset.split_across_devices(images)
+        labels = jax.nn.one_hot(labels, num_classes=num_classes)
         
         variables = {'params': state.params, 'batch_stats': state.batch_stats}
         outputs = state.apply_fn(variables, images, train=False, mutable=False)

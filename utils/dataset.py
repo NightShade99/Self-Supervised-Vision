@@ -4,7 +4,7 @@ import jax
 import numpy as np
 
 from torchvision import datasets
-from .transforms import build_transform
+from transforms import build_transform
 
 
 def numpy_collate(batch):
@@ -17,7 +17,7 @@ def numpy_collate(batch):
         return np.array(batch)
     
     
-def shard(xs):
+def split_across_devices(xs):
     return jax.tree_map(
         lambda x: x.reshape((jax.local_device_count(), -1) + x.shape[1:]) \
             if len(x.shape) != 0 else x, 
