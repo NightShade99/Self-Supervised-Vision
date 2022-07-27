@@ -4,7 +4,7 @@ import jax
 import numpy as np
 
 from torchvision import datasets
-from transforms import build_transform
+from .transforms import build_transform
 
 
 def numpy_collate(batch):
