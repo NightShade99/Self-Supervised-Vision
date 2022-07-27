@@ -136,7 +136,7 @@ def main(args):
         labels = jax.nn.one_hot(labels, num_classes=num_classes)
         
         def loss_fn(params):
-            outputs, new_state = state.apply(
+            outputs, new_state = state.apply_fn(
                 {'params': params, 'batch_stats': state.batch_state},
                 images, train=True, mutable=['batch_stats']
             )
