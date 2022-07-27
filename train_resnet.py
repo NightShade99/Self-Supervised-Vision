@@ -36,7 +36,7 @@ class TrainState(train_state.TrainState):
 
 def main(args):
     # Device information
-    print("Training platform: {}".format(jax.devices()[0].platform))
+    print("\nTraining platform: {}".format(jax.devices()[0].platform))
     print("Number of available devices: {}".format(jax.device_count()))
     
     # Load config file
@@ -133,8 +133,6 @@ def main(args):
     @functools.partial(jax.pmap, axis_name='device')
     def train_step(batch, state):
         images, labels = batch
-        print(images.shape, labels.shape)
-        exit()
         labels = jax.nn.one_hot(labels, num_classes=num_classes)
         
         def loss_fn(params):

@@ -8,7 +8,7 @@ from .transforms import build_transform
 
 
 def split_across_devices(xs):
-    return jax.tree_map(
+    return jax.tree_util.tree_map(
         lambda x: x.reshape((jax.local_device_count(), -1) + x.shape[1:]) \
             if len(x.shape) != 0 else x, 
         xs
