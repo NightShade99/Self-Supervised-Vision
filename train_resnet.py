@@ -174,7 +174,7 @@ def main(args):
     
     def save_checkpoint(state, workdir):
         if jax.process_index() == 0:
-            state = jax.device_get(jax.tree_map(lambda x: x[0], state))
+            state = jax.device_get(jax.tree_util.tree_map(lambda x: x[0], state))
             step = int(state.step)
             checkpoints.save_checkpoint(workdir, state, step, keep=3)
     
