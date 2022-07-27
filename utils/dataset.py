@@ -24,6 +24,8 @@ def numpy_collate(batch):
     else:
         batch = np.array(batch)
     batch = split_across_devices(batch)
+    print(batch[0].shape, batch[1].shape)
+    exit()
     return batch
     
     
