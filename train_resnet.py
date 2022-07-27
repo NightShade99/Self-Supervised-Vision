@@ -137,7 +137,7 @@ def main(args):
         
         def loss_fn(params):
             outputs, new_state = state.apply_fn(
-                {'params': params, 'batch_stats': state.batch_state},
+                {'params': params, 'batch_stats': state.batch_stats},
                 images, train=True, mutable=['batch_stats']
             )
             logits = nn.log_softmax(outputs['outputs'], -1)
