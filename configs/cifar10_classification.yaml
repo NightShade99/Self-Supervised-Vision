@@ -1,0 +1,28 @@
+
+data:
+  name: cifar10
+  root: datasets/cifar10
+  
+  train_transform_cfg:
+    random_crop:
+      size: 32
+      padding: 4
+    random_flip:
+    to_normalized_numpy:
+      mean: [0.4914, 0.4821, 0.4465]
+      std: [0.2470, 0.2435, 0.2616]
+
+  val_transform_cfg:
+    center_crop:
+      size: 32
+    to_normalized_numpy:
+      mean: [0.4914, 0.4821, 0.4465]
+      std: [0.2470, 0.2435, 0.2616]
+
+lr_schedule:
+  name: constant
+  base_lr: 0.001
+  schedule_steps: 100
+
+optimizer:
+  name: sgd
