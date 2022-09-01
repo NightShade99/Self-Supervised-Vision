@@ -1,0 +1,57 @@
+
+data:
+  train:
+    base_dataset: cifar10
+    base_root: datasets/cifar10
+    split: train
+    transform_cfg:
+      color_jitter:
+        brightness: 0.4
+        contrast: 0.4
+        saturation: 0.4
+        hue: 0.1
+        apply_prob: 0.8
+      random_gray:
+        p: 0.2
+      random_resized_crop:
+        size: [32, 32]
+        scale: [0.2, 1.0]
+      random_flip:
+      to_normalized_numpy:
+        mean: [0.4914, 0.4822, 0.4465]
+        std: [0.2470, 0.2435, 0.2616]
+    base_transform_cfg:
+      center_crop:
+        size: [32, 32]
+      to_normalized_numpy:
+        mean: [0.4914, 0.4822, 0.4465]
+        std: [0.2470, 0.2435, 0.2616]
+  val:
+    base_dataset: cifar10
+    base_root: datasets/cifar10
+    split: val
+    transform_cfg:
+      center_crop:
+        size: [32, 32]
+      to_normalized_numpy:
+        mean: [0.4914, 0.4822, 0.4465]
+        std: [0.2470, 0.2435, 0.2616]
+    base_transform_cfg:
+      center_crop:
+        size: [32, 32]
+      to_normalized_numpy:
+        mean: [0.4914, 0.4822, 0.4465]
+        std: [0.2470, 0.2435, 0.2616]
+
+model:
+  temperature: 0.5
+  projection_dim: 128
+
+lr_schedule:
+  name: warmup_cosine
+  base_lr: 2.0
+  warmup_steps: 10
+  schedule_steps: 100
+
+optimizer:
+  name: lars

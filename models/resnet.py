@@ -71,6 +71,7 @@ class ResNet(nn.Module):
     conv: ModuleDef = nn.Conv
     small_images: bool = True
     use_classifier: bool = True
+    projection_dim: int = None
     
     @nn.compact
     def __call__(self, x, train: bool = True):
@@ -109,9 +110,17 @@ class ResNet(nn.Module):
                 )(x)
 
         x = jnp.mean(x, axis=(1, 2))
+        
         if self.use_classifier:
             x = nn.Dense(self.num_classes, dtype=self.dtype)(x)
-        x = jnp.asarray(x, self.dtype)
+            return {'outputs': x}
+        
+        if isinstance(self.projection_dim, int):
+            x = nn.Dense(self.projection_dim)(x)
+            x = nn.BatchNorm(use_running_average=(not train), momentum=0.9, epsilon=1e-05)
+            x = nn.relu(x)
+            x = nn.Dense(self.projection_dim)(x)    
+            x = nn.BatchNorm(use_running_average=(not train), momentum=0.9, epsilon=1e-05)
         
         return {'outputs': x}
     

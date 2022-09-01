@@ -3,6 +3,7 @@ import os
 import jax
 import numpy as np
 
+from torch.utils import data
 from torchvision import datasets
 from .transforms import build_transform
 
@@ -47,3 +48,26 @@ def get_datasets(name, root, train_transform_cfg, val_transform_cfg):
         valset = datasets.ImageFolder(root=os.path.join(root, 'val'), transform=val_transform)
         
     return trainset, valset
+
+
+class DoubleAugmentDataset(data.Dataset):
+    
+    def __init__(self, base_dataset, base_root, split, transform_cfg, base_transform_cfg):
+        super().__init__()
+        
+        if split == 'train':
+            self.dset = get_datasets(base_dataset, base_root, None, None)[0]
+        elif split == 'val':    
+            self.dset = get_datasets(base_dataset, base_root, None, None)[1]
+        
+        self.transform = build_transform(transform_cfg)
+        self.base_transform = build_transform(base_transform_cfg)
+        
+    def __len__(self):
+        return len(self.dset)
+    
+    def __getitem__(self, idx):
+        img, label = self.dset[idx]
+        aug_1, aug_2 = self.transform(img), self.transform(img)
+        img = self.base_transform(img)
+        return aug_1, aug_2, img, label

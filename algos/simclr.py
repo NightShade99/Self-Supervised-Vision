@@ -2,14 +2,14 @@
 import os
 import yaml
 import wandb
-import pickle
 import argparse
 import functools
+import numpy as np
 from typing import Any
 from models import resnet
 from torch.utils import data
 from datetime import datetime as dt
-from utils import dataset, common, optimization
+from utils import dataset, common, evaluation, optimization
 
 import jax 
 import optax
@@ -49,12 +49,13 @@ def main(args):
     init_rng = {'params': param_rng}
         
     # Datasets and dataloaders
-    trainset, valset = dataset.get_datasets(**cfg['data'])
+    trainset = dataset.DoubleAugmentDataset(**cfg['data']['train'])
+    valset = dataset.DoubleAugmentDataset(**cfg['data']['val'])
     
-    if 'cifar' in cfg['data']['name']:
+    if 'cifar' in cfg['data']['train']['base_dataset']:
         inp_shape = (32, 32, 3)
         num_classes = 10
-    elif 'imagenet' in cfg['data']['name']:
+    elif 'imagenet' in cfg['data']['train']['base_dataset']:
         inp_shape = (224, 224, 3)
         num_classes = 1000
     
@@ -82,8 +83,9 @@ def main(args):
     
     model = MODELS[args.model](
         num_classes=num_classes,
-        small_images=('cifar' in cfg['data']['name']),
-        use_classifier=(args.algo == 'classification')
+        small_images=('cifar' in cfg['data']['train']['base_dataset']),
+        use_classifier=(args.algo == 'supervised'),
+        projection_dim=cfg['model']['projection_dim']
     )
     variables = model.init(init_rng, jnp.ones((1, *inp_shape), dtype=jnp.float32))
     
@@ -116,33 +118,55 @@ def main(args):
     
     # Functions for training and evaluation
     # These will be pmapped later for computation across devices
-    def compute_metrics(logits, labels):
-        labels_onehot = jax.nn.one_hot(labels, num_classes=num_classes)
-        loss = optax.softmax_cross_entropy(logits, labels_onehot)
-        loss = jnp.mean(loss)
-
-        accuracy = jnp.mean(jnp.argmax(logits, -1) == labels)
-        metrics = {'loss': loss, 'accuracy': accuracy}
-        
-        metrics = jax.lax.pmean(metrics, axis_name='device')
-        metrics = jax.tree_util.tree_map(lambda x: x.mean(), metrics)
-        return metrics
-    
     @functools.partial(jax.pmap, axis_name='device')
     def train_step(batch, state):
-        images, labels = batch
-        images, labels = images[0], labels[0]
+        aug_1, aug_2, _, _ = batch
+        aug_1, aug_2 = aug_1[0], aug_2[0]
 
         def loss_fn(params):
-            outputs, new_state = state.apply_fn(
+            outputs_1, new_state = state.apply_fn(
                 {'params': params, 'batch_stats': state.batch_stats},
-                images, train=True, mutable=['batch_stats']
+                aug_1, train=True, mutable=['batch_stats']
             )
-            logits = nn.log_softmax(outputs['outputs'], -1)
-            labels_onehot = jax.nn.one_hot(labels, num_classes=num_classes)
-            loss = optax.softmax_cross_entropy(logits, labels_onehot)
-            loss = jnp.mean(loss)
+            outputs_2, new_state = state.apply_fn(
+                {'params': params, 'batch_stats': state.batch_stats},
+                aug_2, train=True, mutable=['batch_stats']
+            )
+            logits_1, logits_2 = outputs_1['outputs'], outputs_2['outputs']
+            
+            # Normalize logits
+            logits_1 = logits_1 / jnp.linalg.norm(logits_1, ord=2, axis=-1)
+            logits_2 = logits_2 / jnp.linalg.norm(logits_2, ord=2, axis=-1)
+            
+            bs = logits_1.shape[0]
+            labels = jnp.zeros((2 * bs,), dtype=jnp.int32)
+            labels = jax.nn.one_hot(labels, num_classes=2)
 
+            mask = jnp.ones((bs, bs), dtype=bool)
+            mask.at[jnp.diag_indices_from(mask)].set(0)
+            
+            logits_11 = jnp.matmul(logits_1, logits_1.transpose()) / cfg['model']['temperature']
+            logits_12 = jnp.matmul(logits_1, logits_2.transpose()) / cfg['model']['temperature']
+            logits_21 = jnp.matmul(logits_2, logits_1.transpose()) / cfg['model']['temperature']
+            logits_22 = jnp.matmul(logits_2, logits_2.transpose()) / cfg['model']['temperature']
+                
+            logits_12_pos = logits_12[jnp.logical_not(mask)]
+            logits_21_pos = logits_21[jnp.logical_not(mask)]
+            logits_11_neg = logits_11[mask].reshape(bs, -1)
+            logits_12_neg = logits_12[mask].reshape(bs, -1)
+            logits_21_neg = logits_21[mask].reshape(bs, -1)
+            logits_22_neg = logits_22[mask].reshape(bs, -1)
+            
+            pos = jnp.concatenate((logits_12_pos, logits_21_pos), axis=0)[:, None]
+            neg_1 = jnp.concatenate((logits_11_neg, logits_12_neg), axis=1)
+            neg_2 = jnp.concatenate((logits_21_neg, logits_22_neg), axis=1)
+            neg = jnp.concatenate((neg_1, neg_2), axis=0)
+            
+            logits = jnp.concatenate((pos, neg), axis=1)
+            logprobs = nn.log_softmax(logits, axis=1)
+            loss = optax.softmax_cross_entropy(logprobs, labels)
+            loss = jnp.mean(loss)
+            
             # L2 weight decay
             weight_penalty_params = jax.tree_util.tree_leaves(params)
             weight_l2 = sum([jnp.sum(x ** 2) for x in weight_penalty_params if x.ndim > 1])
@@ -152,21 +176,9 @@ def main(args):
         aux, grads = jax.value_and_grad(loss_fn, has_aux=True)(state.params)
         grads = jax.lax.pmean(grads, axis_name='device')
         
-        logits, new_state = aux[1]
+        _, new_state = aux[1]
         new_state = state.apply_gradients(grads=grads, batch_stats=new_state['batch_stats'])
-        metrics = compute_metrics(logits, labels)
         return new_state, metrics
-
-    @functools.partial(jax.pmap, axis_name='device')
-    def eval_step(batch, state):
-        images, labels = batch
-        images, labels = images[0], labels[0]
-
-        variables = {'params': state.params, 'batch_stats': state.batch_stats}
-        outputs = state.apply_fn(variables, images, train=False, mutable=False)
-        logits = nn.log_softmax(outputs['outputs'], -1)
-        metrics = compute_metrics(logits, labels)
-        return metrics
     
     def sync_batch_stats(state):
         cross_replica_mean = jax.pmap(lambda x: jax.lax.pmean(x, 'x'), 'x')
@@ -204,9 +216,21 @@ def main(args):
                 wandb.log({'train/accuracy': train_meter.avg()['loss'], 'epoch': epoch})
                 
         # Evaluation
+        features, targets = [], []
+        
         for step, batch in enumerate(val_loader):
-            metrics = eval_step(batch, state)
-            val_meter.add(metrics)
+            _, _, images, labels = batch 
+            images, labels = images[0], labels[0]
+            
+            outputs, _ = state.apply_fn(
+                {'params': state.params, 'batch_stats': state.batch_stats}, 
+                images, train=False
+            )
+            fvecs = outputs['outputs']
+            fvecs = fvecs / jnp.linalg.norm(fvecs, ord=2, axis=-1)
+            
+            features.append(np.asarray(fvecs))
+            targets.append(np.asarray(labels))
             
             if jax.process_index() == 0:
                 common.pbar(
@@ -214,41 +238,23 @@ def main(args):
                     desc='[EVAL] Epoch {}'.format(epoch),
                     status=val_meter.msg()
                 )
+                
+        fvecs = np.concatenate(features).astype(np.float32)
+        targets = np.concatenate(targets).astype(np.int32)
+        knn_acc = evaluation.compute_neighbor_accuracy(fvecs, targets)
         
         if jax.process_index() == 0:
-            logger.write("Epoch {} {}".format(epoch, val_meter.msg()), mode='val')
-            avg_metrics = val_meter.avg()
+            logger.write("Epoch {} [knn accuracy] {}".format(epoch, knn_acc), mode='val')
             
             if args.wandb:
                 wandb.log({
-                    'eval/loss': avg_metrics['loss'],
-                    'eval/accuracy': avg_metrics['accuracy'],
+                    'eval/knn_accuracy': knn_acc,
                     'epoch': epoch
                 })
                 
-            if avg_metrics['accuracy'] > best_val_acc:
-                best_val_acc = avg_metrics['accuracy']
+            if knn_acc > best_val_acc:
+                best_val_acc = knn_acc
                 save_checkpoint(state, workdir)
                 
     # Wait until computations are over to close
     jax.random.normal(jax.random.PRNGKey(args.seed), ()).block_until_ready()
-    
-
-  
-if __name__ == '__main__':
-    
-    ap = argparse.ArgumentParser()
-    ap.add_argument('--config_file', type=str, required=True)
-    ap.add_argument('--expt_name', type=str, required=True)
-    ap.add_argument('--model', type=str, required=True)
-    ap.add_argument('--algo', type=str, required=True)
-    ap.add_argument('--seed', type=int, default=0)
-    ap.add_argument('--load', type=str, default=None)
-    ap.add_argument('--wandb', action='store_true', default=False)
-    ap.add_argument('--batch_size', type=int, default=100)
-    ap.add_argument('--num_workers', type=int, default=4)
-    ap.add_argument('--weight_decay', type=float, default=1e-05)
-    ap.add_argument('--train_epochs', type=int, default=100)
-    args = ap.parse_args()
-    
-    main(args)
