@@ -7,7 +7,7 @@ Implementations and observations on some self-supervised methods used to pre-tra
 
 ## Algorithms
 <a name="algorithms"></a>
-The implementations of algorithms in the table below are currently in progress (or have been completed, if the KNN accuracy is mentioned). This is not an exhaustive list: I'll add more papers to it as I find them.
+The implementations of algorithms have been completed. KNN accuracies are computed by clustering global features of images in CIFAR-10 test set and computing the average percentage of images in each cluster that belong to the same class (after Hungarian matching).
 
 |                                   Algorithm                                   |  Shorthand  |                     Paper                     | KNN accuracy |
 |:-----------------------------------------------------------------------------:|:-----------:|:---------------------------------------------:|:------------:|
@@ -17,12 +17,6 @@ The implementations of algorithms in the table below are currently in progress (
 | Unsupervised Learning of Visual Features by Contrasting Cluster Assignments   |     SwAV    |   [arXiv](https://arxiv.org/abs/2006.09882)   |    72.11     |
 | Momentum Contrast for Unsupervised Visual Representation Learning             |     MoCo    |   [arXiv](https://arxiv.org/abs/1911.05722)   |    63.14     |
 | Barlow Twins: Self-Supervised Learning via Redundancy Reduction               |    Barlow   |   [arXiv](https://arxiv.org/abs/2103.03230)   |    56.81     |
-| Self-Supervised Learning of Pretext-Invariant Representations                 |     PIRL    |   [arXiv](https://arxiv.org/abs/1912.01991)   |              |
-| Learning Representations by Maximizing Mutual Information across Views        |    AMDIM    |   [arXiv](https://arxiv.org/abs/1906.00910)   |              |
-| Representation Learning with Contrastive Predictive Coding                    |     CPC     |   [arXiv](https://arxiv.org/abs/1807.03748)   |              |  
-| Self-Supervised Pretraining of Visual Features in the Wild                    |     SEER    |   [arXiv](https://arxiv.org/abs/2103.01988)   |              |
-| Self-labelling via simultaneous clustering and representation learning        |     SeLa    |   [arXiv](https://arxiv.org/abs/1911.05371)   |              |
-| Emerging Properties in Self-Supervised Vision Transformers                    |     DINO    |   [arXiv](https://arxiv.org/abs/2104.14294)   |              |
 
 ## Usage
 <a name="usage"></a>
