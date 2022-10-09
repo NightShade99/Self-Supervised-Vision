@@ -7,7 +7,7 @@ Implementations and observations on some self-supervised methods used to pre-tra
 
 ## Algorithms
 <a name="algorithms"></a>
-The implementations of algorithms have been completed. KNN accuracies are computed by clustering global features of images in CIFAR-10 test set and computing the average percentage of images in each cluster that belong to the same class (after Hungarian matching).
+The implementations of algorithms below are available. KNN accuracies are computed by clustering global features of images in CIFAR-10 test set and computing the average percentage of images in each cluster that belong to the same class (after Hungarian matching).
 
 |                                   Algorithm                                   |  Shorthand  |                     Paper                     | KNN accuracy |
 |:-----------------------------------------------------------------------------:|:-----------:|:---------------------------------------------:|:------------:|
