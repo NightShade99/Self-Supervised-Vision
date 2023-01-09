@@ -191,9 +191,12 @@ class ReLIC:
                 self.update_tau(step)
                 self.momentum_update()
             print()
+
             self.logger.write("Epoch {:4d}/{:4d} ".format(epoch, self.config["epochs"]) + train_meter.return_msg(), mode="train")
             self.adjust_learning_rate(epoch)
-            self.save_state(epoch)
+            
+            # TODO: Function to save training states from which training can be resumed (not checkpoints)
+            # self.save_state(epoch)
 
             if epoch % self.config["eval_every"] == 0:
                 knn_acc = self.knn_validate()
